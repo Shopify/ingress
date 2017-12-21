@@ -1,18 +1,33 @@
-all: fmt lint vet
+# Copyright 2017 The Kubernetes Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+.PHONY: all
+all: all-container
 
 BUILDTAGS=
 
-# building inside travis generates a custom version of the
-# backends in order to run e2e tests agains the build.
-ifdef TRAVIS_BUILD_ID
-  RELEASE := ci-build-${TRAVIS_BUILD_ID}
-endif
-
-# 0.0 shouldn't clobber any release builds
-RELEASE?=0.0
-
-# by default build a linux version
+# Use the 0.0 tag for testing, it shouldn't clobber any release builds
+TAG?=0.9.0
+REGISTRY?=quay.io/kubernetes-ingress-controller
 GOOS?=linux
+DOCKER?=gcloud docker --
+SED_I?=sed -i
+GOHOSTOS ?= $(shell go env GOHOSTOS)
+
+ifeq ($(GOHOSTOS),darwin)
+  SED_I=sed -i ''
+endif
 
 REPO_INFO=$(shell git config --get remote.origin.url)
 
@@ -20,57 +35,155 @@ ifndef COMMIT
   COMMIT := git-$(shell git rev-parse --short HEAD)
 endif
 
-# base package. It contains the common and backends code
-PKG := "k8s.io/ingress"
+PKG=k8s.io/ingress-nginx
 
-GO_LIST_FILES=$(shell go list ${PKG}/... | grep -v vendor | grep -v -e "test/e2e")
+ARCH ?= $(shell go env GOARCH)
+GOARCH = ${ARCH}
+DUMB_ARCH = ${ARCH}
 
-.PHONY: fmt
-fmt:
-	@go list -f '{{if len .TestGoFiles}}"gofmt -s -l {{.Dir}}"{{end}}' ${GO_LIST_FILES} | xargs -L 1 sh -c
+ALL_ARCH = amd64 arm arm64 ppc64le s390x
 
-.PHONY: lint
-lint:
-	@go list -f '{{if len .TestGoFiles}}"golint -min_confidence=0.85 {{.Dir}}/..."{{end}}' ${GO_LIST_FILES} | xargs -L 1 sh -c
+QEMUVERSION=v2.9.1
 
-.PHONY: test
-test:
-	@go test -v -race -tags "$(BUILDTAGS) cgo" ${GO_LIST_FILES}
+IMGNAME = nginx-ingress-controller
+IMAGE = $(REGISTRY)/$(IMGNAME)
+MULTI_ARCH_IMG = $(IMAGE)-$(ARCH)
 
-.PHONY: test-e2e
-test-e2e: ginkgo
-	@go run hack/e2e.go -v --up --test --down
+# Set default base image dynamically for each arch
+BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):0.30
 
-.PHONY: cover
-cover:
-	@go list -f '{{if len .TestGoFiles}}"go test -coverprofile={{.Dir}}/.coverprofile {{.ImportPath}}"{{end}}' ${GO_LIST_FILES} | xargs -L 1 sh -c
-	gover
-	goveralls -coverprofile=gover.coverprofile -service travis-ci
+ifeq ($(ARCH),arm)
+	QEMUARCH=arm
+	GOARCH=arm
+	DUMB_ARCH=armhf
+endif
+ifeq ($(ARCH),arm64)
+    QEMUARCH=aarch64
+endif
+ifeq ($(ARCH),ppc64le)
+	QEMUARCH=ppc64le
+	GOARCH=ppc64le
+	DUMB_ARCH=ppc64el
+endif
+ifeq ($(ARCH),s390x)
+    QEMUARCH=s390x
+endif
 
-.PHONY: vet
-vet:
-	@go vet ${GO_LIST_FILES}
+TEMP_DIR := $(shell mktemp -d)
+
+DOCKERFILE := $(TEMP_DIR)/rootfs/Dockerfile
+
+.PHONY: image-info
+image-info:
+	echo -n '{"image":"$(IMAGE)","tag":"$(TAG)"}'
+
+.PHONY: sub-container-%
+sub-container-%:
+	$(MAKE) ARCH=$* build container
+
+.PHONY: sub-push-%
+sub-push-%:
+	$(MAKE) ARCH=$* push
+
+.PHONY: all-container
+all-container: $(addprefix sub-container-,$(ALL_ARCH))
+
+.PHONY: all-push
+all-push: $(addprefix sub-push-,$(ALL_ARCH))
+
+.PHONY: container
+container: .container-$(ARCH)
+
+.PHONY: .container-$(ARCH)
+.container-$(ARCH):
+	cp -RP ./* $(TEMP_DIR)
+	$(SED_I) 's|BASEIMAGE|$(BASEIMAGE)|g' $(DOCKERFILE)
+	$(SED_I) "s|QEMUARCH|$(QEMUARCH)|g" $(DOCKERFILE)
+	$(SED_I) "s|DUMB_ARCH|$(DUMB_ARCH)|g" $(DOCKERFILE)
+
+ifeq ($(ARCH),amd64)
+	# When building "normally" for amd64, remove the whole line, it has no part in the amd64 image
+	$(SED_I) "/CROSS_BUILD_/d" $(DOCKERFILE)
+else
+	# When cross-building, only the placeholder "CROSS_BUILD_" should be removed
+	# Register /usr/bin/qemu-ARCH-static as the handler for ARM binaries in the kernel
+	$(DOCKER) run --rm --privileged multiarch/qemu-user-static:register --reset
+	curl -sSL https://github.com/multiarch/qemu-user-static/releases/download/$(QEMUVERSION)/x86_64_qemu-$(QEMUARCH)-static.tar.gz | tar -xz -C $(TEMP_DIR)/rootfs
+	$(SED_I) "s/CROSS_BUILD_//g" $(DOCKERFILE)
+endif
+
+	$(DOCKER) build -t $(MULTI_ARCH_IMG):$(TAG) $(TEMP_DIR)/rootfs
+
+ifeq ($(ARCH), amd64)
+	# This is for to maintain the backward compatibility
+	$(DOCKER) tag $(MULTI_ARCH_IMG):$(TAG) $(IMAGE):$(TAG)
+endif
+
+.PHONY: push
+push: .push-$(ARCH)
+
+.PHONY: .push-$(ARCH)
+.push-$(ARCH):
+	$(DOCKER) push $(MULTI_ARCH_IMG):$(TAG)
+ifeq ($(ARCH), amd64)
+	$(DOCKER) push $(IMAGE):$(TAG)
+endif
 
 .PHONY: clean
 clean:
-	make -C controllers/nginx clean
+	$(DOCKER) rmi -f $(MULTI_ARCH_IMG):$(TAG) || true
 
-.PHONY: controllers
-controllers:
-	make -C controllers/nginx build
+.PHONE: code-generator
+code-generator:
+		go-bindata -o internal/file/bindata.go -prefix="rootfs" -pkg=file -ignore=Dockerfile -ignore=".DS_Store" rootfs/...
+
+.PHONY: build
+build: clean
+	CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} go build -a -installsuffix cgo \
+		-ldflags "-s -w -X ${PKG}/version.RELEASE=${TAG} -X ${PKG}/version.COMMIT=${COMMIT} -X ${PKG}/version.REPO=${REPO_INFO}" \
+		-o ${TEMP_DIR}/rootfs/nginx-ingress-controller ${PKG}/cmd/nginx
+
+.PHONY: verify-all
+verify-all:
+	@./hack/verify-all.sh
+
+.PHONY: test
+test:
+	@echo "+ $@"
+	@go test -v -race -tags "$(BUILDTAGS) cgo" $(shell go list ${PKG}/... | grep -v vendor | grep -v '/test/e2e')
+
+.PHONY: e2e-image
+e2e-image: sub-container-amd64
+	TAG=$(TAG) IMAGE=$(MULTI_ARCH_IMG) docker tag $(IMAGE):$(TAG) $(IMAGE):test
+	docker images
+
+.PHONY: e2e-test
+e2e-test:
+	@go test -o e2e-tests -c ./test/e2e
+	@KUBECONFIG=${HOME}/.kube/config INGRESSNGINXCONFIG=${HOME}/.kube/config ./e2e-tests
+
+.PHONY: cover
+cover:
+	@echo "+ $@"
+	@go list -f '{{if len .TestGoFiles}}"go test -coverprofile={{.Dir}}/.coverprofile {{.ImportPath}}"{{end}}' $(shell go list ${PKG}/... | grep -v vendor | grep -v '/test/e2e') | xargs -L 1 sh -c
+	gover
+	goveralls -coverprofile=gover.coverprofile -service travis-ci -repotoken $$COVERALLS_TOKEN
+
+.PHONY: vet
+vet:
+	@echo "+ $@"
+	@go vet $(shell go list ${PKG}/... | grep -v vendor)
+
+.PHONY: release
+release: all-container all-push
+	echo "done"
 
 .PHONY: docker-build
-docker-build:
-	make -C controllers/nginx all-container
+docker-build: all-container
 
 .PHONY: docker-push
-docker-push:
-	make -C controllers/nginx all-push
+docker-push: all-push
 
-.PHONE: release
-release:
-	make -C controllers/nginx release
-
-.PHONY: ginkgo
-ginkgo:
-	go get github.com/onsi/ginkgo/ginkgo
+.PHONY: check_dead_links
+check_dead_links:
+	docker run -t -v $$PWD:/tmp rubygem/awesome_bot --allow-dupe --allow-redirect $(shell find $$PWD -name "*.md" -mindepth 1 -printf '%P\n' | grep -v vendor | grep -v Changelog.md)
