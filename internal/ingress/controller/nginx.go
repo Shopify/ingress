@@ -352,7 +352,7 @@ func (n *NGINXController) Start() {
 
 type Upstream struct {
 	Name	string	`json:"name"`
-	Down	bool	 	`json:"down"`
+	Down	bool	`json:"down"`
 }
 
 // Post endpoints to the HTTDB endpoint for NGINX to read
@@ -370,9 +370,9 @@ func (n *NGINXController) postEndpoints(ep *apiv1.Endpoints) {
 	}
 	
 	jsonBody, err := json.Marshal(struct {
-		Key 	string			`json:"key"`
-		Value []Upstream	`json:"value"`
-		TTL		int					`json:"ttl"`
+		Key	string	`json:"key"`
+		Value	[]Upstream	`json:"value"`
+		TTL	int	`json:"ttl"`
 	}{
 		"pool-name",	//TODO: This needs to be the dynamic Upstream.Name
 		upstreamPool,
