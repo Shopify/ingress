@@ -336,9 +336,10 @@ func (n *NGINXController) Start() {
 				if evt.Type == store.ConfigurationEvent {
 					n.SetForceReload(true)
 				} else if evt.Type == store.UpdateEvent {
-				if ep, ok := evt.Obj.(*apiv1.Endpoints); ok {
-					n.SetForceNoReload(true)
-					n.postEndpoints(ep)
+					if ep, ok := evt.Obj.(*apiv1.Endpoints); ok {
+						n.SetForceNoReload(true)
+						n.postEndpoints(ep)
+					}
 				}
 				n.syncQueue.Enqueue(evt.Obj)
 			} else {
@@ -370,7 +371,7 @@ func (n *NGINXController) postEndpoints(ep *apiv1.Endpoints) {
 	}
 	
 	jsonBody, err := json.Marshal(struct {
-		Key	string	`json:"key"`
+		Key	string				`json:"key"`
 		Value	[]Upstream	`json:"value"`
 		TTL	int	`json:"ttl"`
 	}{
