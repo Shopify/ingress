@@ -369,7 +369,7 @@ func (n *NGINXController) postEndpoints(ep *apiv1.Endpoints) {
 		}
 	}
 	
-	jsonBody, err := json.Marshal(struct{
+	jsonBody, err := json.Marshal(struct {
 		Key 	string			`json:"key"`
 		Value []Upstream	`json:"value"`
 		TTL		int					`json:"ttl"`
