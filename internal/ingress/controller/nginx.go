@@ -18,10 +18,12 @@ package controller
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
@@ -352,37 +354,36 @@ func (n *NGINXController) Start() {
 }
 
 type Upstream struct {
-	Name	string	`json:"name"`
-	Down	bool	`json:"down"`
+	Name string `json:"name"`
+	Down bool   `json:"down"`
 }
 
 // Post endpoints to the HTTDB endpoint for NGINX to read
 func (n *NGINXController) postEndpoints(ep *apiv1.Endpoints) {
 	upstreamPool := []Upstream{}
-	
+
 	for _, ss := range ep.Subsets {
 		for _, epPort := range ss.Ports {
 			// Append addresses to list of upstreams
 			for _, epAddress := range ss.Addresses {
 				upstreamPool = append(upstreamPool, Upstream{Name: fmt.Sprintf("%s:%d", epAddress.IP, epPort.Port), Down: false})
-				}
 			}
 		}
 	}
-	
+
 	jsonBody, err := json.Marshal(struct {
-		Key	string				`json:"key"`
-		Value	[]Upstream	`json:"value"`
-		TTL	int	`json:"ttl"`
+		Key   string     `json:"key"`
+		Value []Upstream `json:"value"`
+		TTL   int        `json:"ttl"`
 	}{
-		"pool-name",	//TODO: This needs to be the dynamic Upstream.Name
+		"pool-name", //TODO: This needs to be the dynamic Upstream.Name
 		upstreamPool,
 		0,
 	})
 	if err != nil {
 		glog.Warningf("error creating request body %v", err)
 	}
-	
+
 	client := &http.Client{}
 	req, err := http.NewRequest("POST", "http://localhost:18080/httpdb/dicts/dynamic_upstreams/keys", bytes.NewBuffer([]byte(jsonBody)))
 	_, err = client.Do(req)
