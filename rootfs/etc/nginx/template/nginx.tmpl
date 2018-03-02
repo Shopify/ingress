@@ -33,6 +33,11 @@ events {
 
 http {
     lua_package_path "/etc/nginx/lua/?.lua;/etc/nginx/lua/vendor/?.lua;;";
+    lua_shared_dict dynamic_upstreams 1M;
+    init_by_lua_block {
+        require "resty.core"
+        collectgarbage("collect")
+    }
 
     {{/* we use the value of the header X-Forwarded-For to be able to use the geo_ip module */}}
     {{ if $cfg.UseProxyProtocol }}
