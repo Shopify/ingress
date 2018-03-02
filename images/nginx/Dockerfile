@@ -41,7 +41,7 @@ RUN apt-get update && apt-get dist-upgrade -y && \
   libperl-dev \
   cmake \
   util-linux \
-  lua5.1 liblua5.1-0 liblua5.1-dev lua5.1-cjson \
+  libluajit-5.1-dev lua5.1-cjson \
   lmdb-utils \
   libjemalloc1 libjemalloc-dev \
   wget \
