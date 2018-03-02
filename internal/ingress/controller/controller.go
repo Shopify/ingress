@@ -164,6 +164,11 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 		PassthroughBackends: passUpstreams,
 	}
 
+	if n.isForceNoReload() {
+		glog.V(3).Infof("force no reload, skipping backend reload")
+		return nil
+	}
+
 	if !n.isForceReload() && n.runningConfig.Equal(&pcfg) {
 		glog.V(3).Infof("skipping backend reload (no changes detected)")
 		return nil
@@ -1140,5 +1145,19 @@ func (n *NGINXController) SetForceReload(shouldReload bool) {
 		n.syncQueue.Enqueue(&extensions.Ingress{})
 	} else {
 		atomic.StoreInt32(&n.forceReload, 0)
+	}
+}
+
+func (n *NGINXController) isForceNoReload() bool {
+	return atomic.LoadInt32(&n.forceReload) != 0
+}
+
+// SetForceNotReload sets if the ingress controller should NOT be reloaded
+func (n *NGINXController) SetForceNoReload(shouldNotReload bool) {
+	if shouldNotReload {
+		atomic.StoreInt32(&n.forceNoReload, 1)
+		n.syncQueue.Enqueue(&extensions.Ingress{})
+	} else {
+		atomic.StoreInt32(&n.forceNoReload, 0)
 	}
 }
