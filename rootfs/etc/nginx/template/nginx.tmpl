@@ -32,6 +32,8 @@ events {
 }
 
 http {
+    lua_package_path "/etc/nginx/lua/?.lua;/etc/nginx/lua/vendor/?.lua;;";
+
     {{/* we use the value of the header X-Forwarded-For to be able to use the geo_ip module */}}
     {{ if $cfg.UseProxyProtocol }}
     real_ip_header      proxy_protocol;
@@ -336,6 +338,17 @@ http {
         {{ end }}
     }
 
+    upstream upstream_balancer {
+        server 0.0.0.1; # placeholder
+
+        balancer_by_lua_block {
+          local balancer = require("balancer")
+          balancer.call()
+        }
+
+        keepalive 1000;
+    }
+
     {{ end }}
 
     {{/* build the maps that will be use to validate the Whitelist */}}
@@ -451,6 +464,13 @@ http {
             access_log off;
             stub_status on;
             {{ end }}
+        }
+
+        location /lua_dicts {
+            content_by_lua_block {
+              local dicts_handler = require("dicts_handler")
+              dicts_handler.call()
+            }
         }
 
         location / {

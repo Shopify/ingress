@@ -342,7 +342,9 @@ WITH_MODULES="--add-module=$BUILD_PATH/ngx_devel_kit-$NDK_VERSION \
   --add-dynamic-module=$BUILD_PATH/nginx-opentracing-$NGINX_OPENTRACING_VERSION/jaeger \
   --add-dynamic-module=$BUILD_PATH/nginx-opentracing-$NGINX_OPENTRACING_VERSION/zipkin \
   --add-dynamic-module=$BUILD_PATH/ModSecurity-nginx-$MODSECURITY_VERSION \
-  --add-module=$BUILD_PATH/ngx_brotli"
+  --add-module=$BUILD_PATH/ngx_brotli \
+  --add-module=$BUILD_PATH/lua-nginx-module-$LUA_VERSION \
+  --add-module=$BUILD_PATH/lua-upstream-nginx-module-$LUA_UPSTREAM_VERSION"
 
 ./configure \
   --prefix=/usr/share/nginx \
