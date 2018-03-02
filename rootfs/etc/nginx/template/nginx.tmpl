@@ -343,6 +343,8 @@ http {
         {{ end }}
     }
 
+    {{ end }}
+
     upstream upstream_balancer {
         server 0.0.0.1; # placeholder
 
@@ -353,8 +355,6 @@ http {
 
         keepalive 1000;
     }
-
-    {{ end }}
 
     {{/* build the maps that will be use to validate the Whitelist */}}
     {{ range $index, $server := $servers }}
