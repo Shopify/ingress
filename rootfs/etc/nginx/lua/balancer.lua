@@ -6,6 +6,24 @@ local json = require("cjson")
 
 local _M = {}
 
+-- http://nginx.org/en/docs/http/ngx_http_upstream_module.html#example
+-- CAVEAT: nginx is giving out : instead of , so the docs are wrong
+-- 127.0.0.1:26157 : 127.0.0.1:26157 , ngx.var.upstream_addr
+-- 200 : 200 , ngx.var.upstream_status
+-- 0.00 : 0.00, ngx.var.upstream_response_time
+local function split_upstream_var(var)
+  if not var then
+    return nil, nil
+  end
+  local t = {}
+  for v in var:gmatch("[^%s|,]+") do
+    if v ~= ":" then
+      t[#t+1] = v
+    end
+  end
+  return t
+end
+
 local function split_pair(pair, seperator)
   local i = pair:find(seperator)
   if i == nil then
@@ -17,16 +35,21 @@ local function split_pair(pair, seperator)
   end
 end
 
+-- dynamic peers are stored per upstream name
+-- <upstream_name>: "<host1:port1> : <host2:port2> : <host3:port3>"
 local function get_dynamic_peers(upstream_name)
-  local peers_data = dynamic_upstreams_dict:get(upstream_name)
-  if not peers_data then
+  local peers_string = dynamic_upstreams_dict:get(upstream_name)
+  if not peers_string then
     return nil
   end
 
-  local ok, peers = pcall(json.decode, peers_data)
-  if not ok then
-    ngx.log(ngx.WARN, "error decoding peers for upstream pool: " .. upstream_name)
-    return nil
+  local raw_peers = split_upstream_var(peers_string)
+  local peers = {}
+  for i, p in pairs(raw_peers) do
+    peers[i] = {
+      name = p,
+      down = false
+    }
   end
 
   return peers
@@ -39,7 +62,7 @@ end
 local function balance(peers)
   local offset = math.random(1, #peers)
   local peer = peers[offset]
-  return split_pair(peer.name, ':')
+  return split_pair(peer.name, ":")
 end
 
 function _M.call()
@@ -57,7 +80,7 @@ function _M.call()
 
   local ok, err = ngx_balancer.set_current_peer(host, port)
   if ok then
-    ngx.log(ngx.DEBUG, "current peer is set to " .. tostring(host) .. ":" .. tostring(port))
+    ngx.log(ngx.WARN, "current peer is set to " .. tostring(host) .. ":" .. tostring(port))
   else
     ngx.log(ngx.ERR, "error while setting current upstream peer to: " .. tostring(err))
   end
