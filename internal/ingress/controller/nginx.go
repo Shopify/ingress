@@ -753,26 +753,13 @@ func (n *NGINXController) setupSSLProxy() {
 
 // IsDynamicallyConfigurable decides if the new configuration can be dynamically configured without reloading
 func (n *NGINXController) IsDynamicallyConfigurable(pcfg *ingress.Configuration) bool {
-	runningBackends := make([]*ingress.Backend, 0, len(n.runningConfig.Backends))
-	newBackends := make([]*ingress.Backend, 0, len(pcfg.Backends))
+	var copyOfRunningConfig ingress.Configuration = *n.runningConfig
+	var copyOfPcfg ingress.Configuration = *pcfg
 
-	for i := 0; i < len(n.runningConfig.Backends); i++ {
-		runningBackends = append(runningBackends, n.runningConfig.Backends[i].DeepCopy())
-	}
+	copyOfRunningConfig.Backends = []*ingress.Backend{}
+	copyOfPcfg.Backends = []*ingress.Backend{}
 
-	for i := 0; i < len(pcfg.Backends); i++ {
-		newBackends = append(newBackends, pcfg.Backends[i].DeepCopy())
-	}
-
-	n.runningConfig.Backends = []*ingress.Backend{}
-	pcfg.Backends = []*ingress.Backend{}
-
-	ret := n.runningConfig.Equal(pcfg)
-
-	n.runningConfig.Backends = runningBackends
-	pcfg.Backends = newBackends
-
-	return ret
+	return copyOfRunningConfig.Equal(&copyOfPcfg)
 }
 
 // ConfigureDynamically JSON encodes new Backends and POSTs it to an internal HTTP endpoint

@@ -53,7 +53,10 @@ func TestIsDynamicallyConfigurable(t *testing.T) {
 	}
 
 	n := &NGINXController{
-		runningConfig: commonConfig,
+		runningConfig: &ingress.Configuration{
+			Backends: backends,
+			Servers:  servers,
+		},
 	}
 
 	newConfig := commonConfig
@@ -62,19 +65,27 @@ func TestIsDynamicallyConfigurable(t *testing.T) {
 	}
 
 	newConfig = &ingress.Configuration{
-		Backends: []*ingress.Backend{{}},
-		Servers:  []*ingress.Server{{}},
+		Backends: []*ingress.Backend{{Name: "another-backend-8081"}},
+		Servers:  []*ingress.Server{{Hostname: "myapp1.fake"}},
 	}
 	if n.IsDynamicallyConfigurable(newConfig) {
 		t.Errorf("Expected to not be dynamically configurable when there's more than just backends change")
 	}
 
 	newConfig = &ingress.Configuration{
-		Backends: []*ingress.Backend{{}},
+		Backends: []*ingress.Backend{{Name: "a-backend-8080"}},
 		Servers:  servers,
 	}
 	if !n.IsDynamicallyConfigurable(newConfig) {
 		t.Errorf("Expected to be dynamically configurable when only backends change")
+	}
+
+	if !n.runningConfig.Equal(commonConfig) {
+		t.Errorf("Expected running config to not change")
+	}
+
+	if !newConfig.Equal(&ingress.Configuration{Backends: []*ingress.Backend{{Name: "a-backend-8080"}}, Servers: servers}) {
+		t.Errorf("Expected new config to not change")
 	}
 }
 
