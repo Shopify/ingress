@@ -41,16 +41,14 @@ RUN apt-get update && apt-get dist-upgrade -y && \
   libperl-dev \
   cmake \
   util-linux \
-  libluajit-5.1-dev lua5.1-cjson \
   lmdb-utils \
   libjemalloc1 libjemalloc-dev \
   wget \
   libcurl4-openssl-dev \
   procps \
   git g++ pkgconf flex bison doxygen libyajl-dev liblmdb-dev libtool dh-autoreconf libxml2 libpcre++-dev libxml2-dev \
+  lua-cjson \
   || exit 1
-
-RUN ln -s /usr/lib/x86_64-linux-gnu/liblua5.1.so /usr/lib/liblua.so
 
 COPY build.sh /
 RUN /build.sh
