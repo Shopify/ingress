@@ -32,7 +32,8 @@ events {
 }
 
 http {
-    lua_package_path "/etc/nginx/lua/?.lua;/etc/nginx/lua/vendor/?.lua;;";
+    lua_package_cpath "/usr/lib/x86_64-linux-gnu/lua/5.1/?.so;;";
+    lua_package_path "/etc/nginx/lua/?.lua;/etc/nginx/lua/vendor/?.lua;/usr/local/lib/lua/?.lua;;";
     lua_shared_dict dynamic_upstreams 1M;
     init_by_lua_block {
         require "resty.core"
