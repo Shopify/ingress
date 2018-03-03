@@ -17,9 +17,12 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
+	"net/http"
 	"reflect"
 	"sort"
 	"strconv"
@@ -164,9 +167,8 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 		PassthroughBackends: passUpstreams,
 	}
 
-	if n.isForceNoReload() {
-		glog.V(3).Infof("force no reload, skipping backend reload")
-		return nil
+	if !n.runningConfig.Backends.Equal(&pcfg.Backends) {
+		n.postEndpoints(pcfg.Backends)
 	}
 
 	if !n.isForceReload() && n.runningConfig.Equal(&pcfg) {
@@ -191,6 +193,43 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 	n.SetForceReload(false)
 
 	return nil
+}
+
+type Upstream struct {
+	Name string `json:"name"`
+	Down bool   `json:"down"`
+}
+
+// Post endpoints to the HTTDB endpoint for NGINX to read
+func (n *NGINXController) postEndpoints(upstreams []*ingress.Backend) {
+	client := &http.Client{}
+
+	for _, upstream := upstreams {
+		upstreamPoolIPs := []Upstream{}
+
+		for _, ep := upstream.Endpoints {
+			upstreamPoolIPs = append(upstreamPool, Upstream{Name: fmt.Sprintf("%s:%s", ep.Address, ep.Port), Down: false})
+		}
+
+		jsonBody, err := json.Marshal(struct {
+			Key   string     `json:"key"`
+			Value []Upstream `json:"value"`
+			TTL   int        `json:"ttl"`
+		}{
+			upstream.Name,
+			upstreamPoolIPs,
+			0,
+		})
+		if err != nil {
+			glog.Warningf("error creating request body %v", err)
+		}
+
+		req, err := http.NewRequest("POST", "http://localhost:18080/httpdb/dicts/dynamic_upstreams/keys", bytes.NewBuffer([]byte(jsonBody)))
+		_, err = client.Do(req)
+		if err != nil {
+			glog.Warningf("error posting endpoint %v", err)
+		}
+	}
 }
 
 func (n *NGINXController) getStreamServices(configmapName string, proto apiv1.Protocol) []ingress.L4Service {
