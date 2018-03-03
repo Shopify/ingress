@@ -1,6 +1,8 @@
 local router = require 'router'
 local json = require("cjson")
 
+local dynamic_upstreams_dict = ngx.shared.dynamic_upstreams
+
 local _M = {}
 
 --curl -XPOST -d '{"key": "upstream-default-backend", "value": "172.17.0.4:8080 : 172.17.0.4:8081 : 172.17.0.5:8080", "ttl": 0}' localhost:18080/lua_dicts/dynamic_upstreams/keys
@@ -11,28 +13,26 @@ function _M.call()
 
   r:match({
     POST = {
-      ["/lua_dicts/:name/keys"] = function(params)
-        local dict = ngx.shared[params.name]
-        if not dict then
-          return params.name .. " could not be found"
-        end
-
+      ["/configuration/backends/:name/endpoints"] = function(params)
         ngx.req.read_body() -- explicitly read the req body
-        local ok, body = pcall(json.decode, ngx.req.get_body_data())
+        local ok, endpoints = pcall(json.decode, ngx.req.get_body_data())
         if not ok then
-          return "could not parse request body: " .. tostring(body)
+          return "could not parse request body: " .. tostring(endpoints)
         end
 
-        if body.value == json.null then
-          body.value = nil
+        endpoints_with_ports = {}
+        for i, endpoint in pairs(endpoints) do
+          endpoints_with_ports[i] = endpoint.address .. ":" .. endpoint.port
         end
+        endpoints_string = table.concat(endpoints_with_ports, " : ")
 
-        local success, err = dict:set(body.key, body.value, body.ttl or 0)
+        local success, err = dynamic_upstreams_dict:set(params.name, endpoints_string, 0)
         if not success then
           return err
         end
 
-        ngx.print(tostring(body.key) .. " is set to " .. tostring(body.value) .. " in " .. tostring(params.name))
+        ngx.status = 201
+        ngx.print("endpoints for '" .. tostring(params.name) .. "' updated to '" .. endpoints_string .. "'")
       end
     }
   })
@@ -42,13 +42,11 @@ function _M.call()
     if errmsg then
       ngx.status = 400
       ngx.print(tostring(errmsg))
-    else
-      ngx.status = 200
     end
   else
+    ngx.log(ngx.ERROR, errmsg)
     ngx.status = 404
     ngx.print("Not found!")
-    ngx.log(ngx.ERROR, errmsg)
   end
 end
 

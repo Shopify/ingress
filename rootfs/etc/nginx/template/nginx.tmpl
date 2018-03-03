@@ -471,10 +471,10 @@ http {
             {{ end }}
         }
 
-        location /lua_dicts {
+        location /configuration {
             content_by_lua_block {
-              local dicts_handler = require("dicts_handler")
-              dicts_handler.call()
+              local configuration = require("configuration")
+              configuration.call()
             }
         }
 

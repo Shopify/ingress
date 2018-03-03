@@ -1,8 +1,9 @@
 local ngx_balancer = require("ngx.balancer")
 local ngx_upstream = require("ngx.upstream")
 local math = require("math")
-local dynamic_upstreams_dict = ngx.shared.dynamic_upstreams
 local json = require("cjson")
+
+local dynamic_upstreams_dict = ngx.shared.dynamic_upstreams
 
 local _M = {}
 
