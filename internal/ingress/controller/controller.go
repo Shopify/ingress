@@ -17,9 +17,12 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
+	"net/http"
 	"reflect"
 	"sort"
 	"strconv"
@@ -167,11 +170,79 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 	if !n.isForceReload() && n.runningConfig.Equal(&pcfg) {
 		glog.V(3).Infof("skipping backend reload (no changes detected)")
 		return nil
+	} else if !n.isForceReload() && len(n.runningConfig.Backends) == len(pcfg.Backends) {
+		// check whether the configuration change is only about endpoints
+
+		newBackends := make([]*ingress.Backend, 0, len(pcfg.Backends))
+		runningBackends := make([]*ingress.Backend, 0, len(n.runningConfig.Backends))
+		for i := 0; i < len(n.runningConfig.Backends); i++ {
+			newBackends = append(newBackends, pcfg.Backends[i].DeepCopy())
+			runningBackends = append(runningBackends, n.runningConfig.Backends[i].DeepCopy())
+		}
+
+		for i := 0; i < len(n.runningConfig.Backends); i++ {
+			pcfg.Backends[i].Endpoints = []ingress.Endpoint{}
+			n.runningConfig.Backends[i].Endpoints = []ingress.Endpoint{}
+		}
+		if n.runningConfig.Equal(&pcfg) {
+			// so configuration change is only about endpoints and force reload is not set
+			// we can skip reload and dynamically update endpoints
+			glog.Infof("only endpoints have changed, skipping reload and posting them to Nginx via HTTP request")
+
+			// reset backends
+			pcfg.Backends = newBackends
+			n.runningConfig.Backends = runningBackends
+
+			for _, backend := range pcfg.Backends {
+				found := false
+				for _, runningBackend := range n.runningConfig.Backends {
+					if backend.Equal(runningBackend) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					// endpoints of this backend have been updated, needs to be posted to Nginx
+					buf, err := json.Marshal(backend.Endpoints)
+					if err != nil {
+						glog.Errorf("unexpected error when json encoding endpoints: \n%v", err)
+						// TODO(elvinefendi) implement retry logic
+						continue
+					}
+
+					// TODO(elvinefendi) set port dynamically
+					resp, err := http.Post("http://localhost:18080/configuration/backends/"+backend.Name+"/endpoints", "application/json", bytes.NewReader(buf))
+					if err != nil {
+						glog.Errorf("unexpected error when POSTing HTTP request: \n%v", err)
+						// TODO(elvinefendi) implement retry logic
+						continue
+					}
+
+					defer func() {
+						if err := resp.Body.Close(); err != nil {
+							glog.Warningf("error while closing response body: \n%v", err)
+						}
+					}()
+
+					if resp.StatusCode != http.StatusCreated {
+						glog.Errorf("Unexpected error code: %v", resp.StatusCode)
+					} else {
+						glog.Infof("endpoints for " + backend.Name + " have been updated")
+					}
+				} else {
+					glog.Infof(backend.Name + " is same as running config. number of endpoints: " + string(len(backend.Endpoints)))
+				}
+			}
+
+			n.OnUpdate(pcfg, true)
+			n.runningConfig = &pcfg
+			return nil
+		}
 	}
 
 	glog.Infof("backend reload required")
 
-	err := n.OnUpdate(pcfg)
+	err := n.OnUpdate(pcfg, false)
 	if err != nil {
 		incReloadErrorCount()
 		glog.Errorf("unexpected failure restarting the backend: \n%v", err)

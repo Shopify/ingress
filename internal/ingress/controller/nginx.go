@@ -448,7 +448,7 @@ Error: %v
 //
 // returning nill implies the backend will be reloaded.
 // if an error is returned means requeue the update
-func (n *NGINXController) OnUpdate(ingressCfg ingress.Configuration) error {
+func (n *NGINXController) OnUpdate(ingressCfg ingress.Configuration, skipReload bool) error {
 	cfg := n.store.GetBackendConfiguration()
 	cfg.Resolver = n.resolver
 
@@ -664,9 +664,11 @@ func (n *NGINXController) OnUpdate(ingressCfg ingress.Configuration) error {
 		return err
 	}
 
-	o, err := exec.Command(n.binary, "-s", "reload", "-c", cfgPath).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%v\n%v", err, string(o))
+	if !skipReload {
+		o, err := exec.Command(n.binary, "-s", "reload", "-c", cfgPath).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("%v\n%v", err, string(o))
+		}
 	}
 
 	return nil
