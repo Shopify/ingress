@@ -34,10 +34,30 @@ events {
 http {
     lua_package_cpath "/usr/lib/x86_64-linux-gnu/lua/5.1/?.so;;";
     lua_package_path "/etc/nginx/lua/?.lua;/etc/nginx/lua/vendor/?.lua;/usr/local/lib/lua/?.lua;;";
-    lua_shared_dict dynamic_upstreams 1M;
+    lua_shared_dict backends_data 5M;
     init_by_lua_block {
-        require "resty.core"
+        require("resty.core")
         collectgarbage("collect")
+
+        -- init modules
+        local ok, res
+
+        ok, res = pcall(require, "configuration")
+        if not ok then
+          error("require failed: " .. tostring(res))
+        else
+          configuration = res
+        end
+
+        ok, res = pcall(require, "balancer")
+        if not ok then
+          error("require failed: " .. tostring(res))
+        else
+          balancer = res
+        end
+    }
+    init_worker_by_lua_block {
+        configuration.init_worker()
     }
 
     {{/* we use the value of the header X-Forwarded-For to be able to use the geo_ip module */}}
@@ -350,7 +370,6 @@ http {
         server 0.0.0.1; # placeholder
 
         balancer_by_lua_block {
-          local balancer = require("balancer")
           balancer.call()
         }
 
@@ -474,7 +493,6 @@ http {
 
         location /configuration {
             content_by_lua_block {
-              local configuration = require("configuration")
               configuration.call()
             }
         }

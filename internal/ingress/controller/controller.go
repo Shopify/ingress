@@ -203,7 +203,7 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 				}
 				if !found {
 					// endpoints of this backend have been updated, needs to be posted to Nginx
-					buf, err := json.Marshal(backend.Endpoints)
+					buf, err := json.Marshal(backend)
 					if err != nil {
 						glog.Errorf("unexpected error when json encoding endpoints: \n%v", err)
 						// TODO(elvinefendi) implement retry logic
@@ -211,7 +211,7 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 					}
 
 					// TODO(elvinefendi) set port dynamically
-					resp, err := http.Post("http://localhost:18080/configuration/backends/"+backend.Name+"/endpoints", "application/json", bytes.NewReader(buf))
+					resp, err := http.Post("http://localhost:18080/configuration/backends/"+backend.Name, "application/json", bytes.NewReader(buf))
 					if err != nil {
 						glog.Errorf("unexpected error when POSTing HTTP request: \n%v", err)
 						// TODO(elvinefendi) implement retry logic
