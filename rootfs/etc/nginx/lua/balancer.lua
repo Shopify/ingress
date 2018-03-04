@@ -2,40 +2,44 @@ local ngx_balancer = require("ngx.balancer")
 local ngx_upstream = require("ngx.upstream")
 local math = require("math")
 local json = require("cjson")
+local resty_chash = require("resty.chash")
+local resty_roundrobin = require("resty.roundrobin")
 local configuration = require("configuration")
+local util = require("util")
+
+local DEFAULT_ALGORITHM = "round_robin"
 
 local _M = {}
 
-local function get_peers(upstream_name)
-  local backend = configuration.get_backend(upstream_name)
-  if backend then
-    return backend.endpoints
-  end
-  ngx_upstream.get_primary_peers(upstream_name)
-end
+local function balance_least_conn(endpoints)
+  local servers, nodes = {}, {}
+  local str_null = string.char(0)
 
-local function balance(peers)
-  local offset = math.random(1, #peers)
-  local peer = peers[offset]
-  return peer.address, peer.port
+  for _, endpoint in ipairs(endpoints) do
+    local id = endpoint.address .. str_null .. endpoint.port
+    servers[id] = endpoint
+    nodes[id] = 1
+  end
+
+  -- TODO(elvinefendi) move this out of hot path and do it in process_backends_data function instead
+  local chash = resty_chash:new(nodes)
+
+  local id = chash:find()
+  local endpoint = servers[id]
+  return endpoint.address, endpoint.port
 end
 
 function _M.call()
-  ngx.log(ngx.WARN, "I'm the balancer")
-
   ngx_balancer.set_more_tries(1)
 
-  local peers = get_peers(ngx.var.proxy_upstream_name)
-  if not peers or #peers == 0 then
-    ngx.log(ngx.ERR, "no upstream peers available")
-    return
-  end
-
-  local host, port = balance(peers)
+  local lb = configuration.get_lb(ngx.var.proxy_upstream_name)
+  local host_port_string = lb:find()
+  ngx.log(ngx.INFO, "selected host_port_string: " .. host_port_string)
+  local host, port = util.split_pair(host_port_string, ":")
 
   local ok, err = ngx_balancer.set_current_peer(host, port)
   if ok then
-    ngx.log(ngx.WARN, "current peer is set to " .. tostring(host) .. ":" .. tostring(port))
+    ngx.log(ngx.INFO, "current peer is set to " .. host_port_string)
   else
     ngx.log(ngx.ERR, "error while setting current upstream peer to: " .. tostring(err))
   end

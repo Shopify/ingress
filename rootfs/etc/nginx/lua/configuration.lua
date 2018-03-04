@@ -1,5 +1,10 @@
 local router = require("router")
 local json = require("cjson")
+local util = require("util")
+
+-- key's are backend names
+-- value's are respective load balancing algorithm name to use for the backend
+local backend_lb_algorithms = ngx.shared.backend_lb_algorithms
 
 -- key's are always going to be ngx.var.proxy_upstream_name, a uniqueue identifier of an app's Backend object
 -- currently it is built our of namepsace, service name and service port
@@ -17,16 +22,40 @@ local BACKEND_PROCESSING_DELAY = 1
 
 local _M = {}
 
+local lbs = {}
 local backends = {}
 
-function _M.get_backend(name)
-  return backends[name]
+function _M.get_lb(backend_name)
+  return lbs[backend_name]
+end
+
+local resty_roundrobin = require("resty.roundrobin")
+
+-- TODO(elvinefendi) make this consider lb_alg instead of always using round robin
+local function update_backend(backend)
+  ngx.log(ngx.INFO, "updating backend: " .. backend.name)
+
+  local servers, nodes = {}, {}
+
+  for _, endpoint in ipairs(backend.endpoints) do
+    id = endpoint.address .. ":" .. endpoint.port
+    servers[id] = endpoint
+    nodes[id] = 1
+  end
+
+  local rr = lbs[backend.name]
+  if rr then
+    rr:reinit(nodes)
+  else
+    rr = resty_roundrobin:new(nodes)
+  end
+
+  lbs[backend.name] = rr
+  backends[backend.name] = backend
 end
 
 -- this function will be periodically called in every worker to decode backends and store them in local backends variable
 local function process_backends_data()
-  ngx.log(ngx.DEBUG, "processing backends_data")
-
   -- 0 here means get all the keys which can be slow if there are many keys
   -- TODO(elvinefendi) think about storing comma separated backend names in another dictionary and using that to
   -- fetch the list of them here insted of blocking the access to shared dictionary
@@ -38,7 +67,9 @@ local function process_backends_data()
     local ok, backend = pcall(json.decode, backend_data)
 
     if ok then
-      backends[backend_name] = backend
+      if not util.deep_compare(backends[backend_name], backend, true) then
+        update_backend(backend)
+      end
     else
       ngx.log(ngx.ERROR,  "could not parse backend_json: " .. tostring(backend))
     end
@@ -63,6 +94,14 @@ function _M.call()
         local success, err = backends_data:set(params.name, ngx.req.get_body_data())
         if not success then
           return err
+        end
+
+        -- TODO(elvinefendi) also check if it is a supported algorith
+        if params.lb_alg ~=nil and params.lb_alg ~= "" then
+          success, err = backend_lb_algorithms:set(params.name, params.lb_alg)
+          if not success then
+            return err
+          end
         end
 
         ngx.status = 201
