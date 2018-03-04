@@ -1,6 +1,4 @@
 local router = require("router")
-local json = require("cjson")
-local util = require("util")
 
 -- key's are backend names
 -- value's are respective load balancing algorithm name to use for the backend
@@ -15,72 +13,21 @@ local backends_data = ngx.shared.backends_data
 -- similar to backends_data
 -- local servers_data = ngx.shared.servers_data
 
--- measured in seconds
--- for an Nginx worker to pick up the new list of upstream peers 
--- it will take <the delay until controller POSTed the backend object to the Nginx endpoint> + BACKEND_PROCESSING_DELAY
-local BACKEND_PROCESSING_DELAY = 1
-
 local _M = {}
 
-local lbs = {}
-local backends = {}
-
-function _M.get_lb(backend_name)
-  return lbs[backend_name]
+function _M.get_lb_alg(backend_name)
+  return backend_lb_algorithms:get(backend_name)
 end
 
-local resty_roundrobin = require("resty.roundrobin")
-
--- TODO(elvinefendi) make this consider lb_alg instead of always using round robin
-local function update_backend(backend)
-  ngx.log(ngx.INFO, "updating backend: " .. backend.name)
-
-  local servers, nodes = {}, {}
-
-  for _, endpoint in ipairs(backend.endpoints) do
-    id = endpoint.address .. ":" .. endpoint.port
-    servers[id] = endpoint
-    nodes[id] = 1
-  end
-
-  local rr = lbs[backend.name]
-  if rr then
-    rr:reinit(nodes)
-  else
-    rr = resty_roundrobin:new(nodes)
-  end
-
-  lbs[backend.name] = rr
-  backends[backend.name] = backend
+function _M.get_backend_data(backend_name)
+  return backends_data:get(backend_name)
 end
 
--- this function will be periodically called in every worker to decode backends and store them in local backends variable
-local function process_backends_data()
+function _M.get_backend_names()
   -- 0 here means get all the keys which can be slow if there are many keys
   -- TODO(elvinefendi) think about storing comma separated backend names in another dictionary and using that to
   -- fetch the list of them here insted of blocking the access to shared dictionary
-  backend_names = backends_data:get_keys(0)
-
-  for _, backend_name in pairs(backend_names) do
-    backend_data = backends_data:get(backend_name)
-
-    local ok, backend = pcall(json.decode, backend_data)
-
-    if ok then
-      if not util.deep_compare(backends[backend_name], backend, true) then
-        update_backend(backend)
-      end
-    else
-      ngx.log(ngx.ERROR,  "could not parse backend_json: " .. tostring(backend))
-    end
-  end
-end
-
-function _M.init_worker()
-  _, err = ngx.timer.every(BACKEND_PROCESSING_DELAY, process_backends_data)
-  if err then
-    ngx.log(ngx.ERROR, "error when setting up timer.every for process_backends_data: " .. tostring(err))
-  end
+  return backends_data:get_keys(0)
 end
 
 function _M.call()
