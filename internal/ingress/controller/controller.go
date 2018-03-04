@@ -17,9 +17,12 @@ limitations under the License.
 package controller
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
+	"net/http"
 	"reflect"
 	"sort"
 	"strconv"
@@ -164,6 +167,10 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 		PassthroughBackends: passUpstreams,
 	}
 
+	if !n.runningConfig.Backends.Equal(&pcfg.Backends) {
+		n.postEndpoints(pcfg.Backends)
+	}
+
 	if !n.isForceReload() && n.runningConfig.Equal(&pcfg) {
 		glog.V(3).Infof("skipping backend reload (no changes detected)")
 		return nil
@@ -186,6 +193,43 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 	n.SetForceReload(false)
 
 	return nil
+}
+
+type Upstream struct {
+	Name string `json:"name"`
+	Down bool   `json:"down"`
+}
+
+// Post endpoints to the HTTDB endpoint for NGINX to read
+func (n *NGINXController) postEndpoints(upstreams []*ingress.Backend) {
+	client := &http.Client{}
+
+	for _, upstream := upstreams {
+		upstreamPoolIPs := []Upstream{}
+
+		for _, ep := upstream.Endpoints {
+			upstreamPoolIPs = append(upstreamPool, Upstream{Name: fmt.Sprintf("%s:%s", ep.Address, ep.Port), Down: false})
+		}
+
+		jsonBody, err := json.Marshal(struct {
+			Key   string     `json:"key"`
+			Value []Upstream `json:"value"`
+			TTL   int        `json:"ttl"`
+		}{
+			upstream.Name,
+			upstreamPoolIPs,
+			0,
+		})
+		if err != nil {
+			glog.Warningf("error creating request body %v", err)
+		}
+
+		req, err := http.NewRequest("POST", "http://localhost:18080/httpdb/dicts/dynamic_upstreams/keys", bytes.NewBuffer([]byte(jsonBody)))
+		_, err = client.Do(req)
+		if err != nil {
+			glog.Warningf("error posting endpoint %v", err)
+		}
+	}
 }
 
 func (n *NGINXController) getStreamServices(configmapName string, proto apiv1.Protocol) []ingress.L4Service {
@@ -1140,5 +1184,19 @@ func (n *NGINXController) SetForceReload(shouldReload bool) {
 		n.syncQueue.Enqueue(&extensions.Ingress{})
 	} else {
 		atomic.StoreInt32(&n.forceReload, 0)
+	}
+}
+
+func (n *NGINXController) isForceNoReload() bool {
+	return atomic.LoadInt32(&n.forceReload) != 0
+}
+
+// SetForceNotReload sets if the ingress controller should NOT be reloaded
+func (n *NGINXController) SetForceNoReload(shouldNotReload bool) {
+	if shouldNotReload {
+		atomic.StoreInt32(&n.forceNoReload, 1)
+		n.syncQueue.Enqueue(&extensions.Ingress{})
+	} else {
+		atomic.StoreInt32(&n.forceNoReload, 0)
 	}
 }

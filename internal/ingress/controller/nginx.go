@@ -254,6 +254,8 @@ type NGINXController struct {
 
 	forceReload int32
 
+	forceNoReload int32
+
 	t *ngx_template.Template
 
 	binary   string
@@ -662,6 +664,11 @@ func (n *NGINXController) OnUpdate(ingressCfg ingress.Configuration) error {
 	err = ioutil.WriteFile(cfgPath, content, 0644)
 	if err != nil {
 		return err
+	}
+
+	if n.isForceNoReload() {
+		glog.V(3).Infof("force no reload, skipping backend reload")
+		return nil
 	}
 
 	o, err := exec.Command(n.binary, "-s", "reload", "-c", cfgPath).CombinedOutput()
