@@ -18,10 +18,12 @@ package controller
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
@@ -742,4 +744,50 @@ func (n *NGINXController) setupSSLProxy() {
 			go n.Proxy.Handle(conn)
 		}
 	}()
+}
+
+// decide if the new configuration can be dynamically configured without reloading
+func (n *NGINXController) IsDynamicallyConfigurable(pcfg *ingress.Configuration) bool {
+	newBackends := make([]*ingress.Backend, 0, len(pcfg.Backends))
+	runningBackends := make([]*ingress.Backend, 0, len(n.runningConfig.Backends))
+
+	for i := 0; i < len(n.runningConfig.Backends); i++ {
+		newBackends = append(newBackends, pcfg.Backends[i].DeepCopy())
+		runningBackends = append(runningBackends, n.runningConfig.Backends[i].DeepCopy())
+	}
+
+	n.runningConfig.Backends = []*ingress.Backend{}
+	pcfg.Backends = []*ingress.Backend{}
+
+	ret := n.runningConfig.Equal(pcfg)
+
+	pcfg.Backends = newBackends
+	n.runningConfig.Backends = runningBackends
+
+	return ret
+}
+
+func (n *NGINXController) ConfigureDynamically(pcfg *ingress.Configuration) error {
+	buf, err := json.Marshal(pcfg.Backends)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("http://localhost:%d/configuration/backends", n.cfg.ListenPorts.Status)
+	resp, err := http.Post(url, "application/json", bytes.NewReader(buf))
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			glog.Warningf("error while closing response body: \n%v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("Unexpected error code: %d", resp.StatusCode)
+	}
+
+	return nil
 }
