@@ -44,7 +44,7 @@ local function sync_backend(backend)
   -- also reset the respective balancer state since backend has changed
   round_robin_state:delete(backend.name)
 
-  ngx.log(ngx.INFO, "syncronization completed for: " .. backend.name)
+  ngx.log(ngx.DEBUG, "syncronization completed for: " .. backend.name)
 end
 
 local function sync_backends()
