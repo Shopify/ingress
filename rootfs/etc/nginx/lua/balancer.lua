@@ -3,15 +3,20 @@ local json = require("cjson")
 local configuration = require("configuration")
 local util = require("util")
 local lrucache = require("resty.lrucache")
+local resty_lock = require("resty.lock")
 
 -- measured in seconds
 -- for an Nginx worker to pick up the new list of upstream peers 
 -- it will take <the delay until controller POSTed the backend object to the Nginx endpoint> + BACKENDS_SYNC_INTERVAL
 local BACKENDS_SYNC_INTERVAL = 1
 
+ROUND_ROBIN_LOCK_KEY = "round_robin"
+
 local round_robin_state = ngx.shared.round_robin_state
 
 local _M = {}
+
+local round_robin_lock = resty_lock:new("locks", {timeout = 0, exptime = 0.1})
 
 local backends, err = lrucache.new(1024)
 if not backends then
@@ -31,7 +36,7 @@ local function balance()
   end
 
   -- Round-Robin
-  -- TODO(elvinefendi) use resty lock here, otherwise there can be race
+  round_robin_lock:lock(backend_name .. ROUND_ROBIN_LOCK_KEY)
   local index = round_robin_state:get(backend_name)
   local index, endpoint = next(backend.endpoints, index)
   if not index then
@@ -39,6 +44,8 @@ local function balance()
     endpoint = backend.endpoints[index]
   end
   round_robin_state:set(backend_name, index)
+  round_robin_lock:unlock(backend_name .. ROUND_ROBIN_LOCK_KEY)
+
   return endpoint.address, endpoint.port
 end
 
@@ -48,7 +55,7 @@ local function sync_backend(backend)
   -- also reset the respective balancer state since backend has changed
   round_robin_state:delete(backend.name)
 
-  ngx.log(ngx.DEBUG, "syncronization completed for: " .. backend.name)
+  ngx.log(ngx.INFO, "syncronization completed for: " .. backend.name)
 end
 
 local function sync_backends()
@@ -59,7 +66,7 @@ local function sync_backends()
 
   local ok, new_backends = pcall(json.decode, backends_data)
   if not ok then
-    ngx.log(ngx.ERR,  "could not parse backends data: " .. tostring(backends))
+    ngx.log(ngx.ERR,  "could not parse backends data: " .. tostring(new_backends))
     return
   end
 
@@ -68,7 +75,7 @@ local function sync_backends()
     local backend_changed = true
 
     if backend then
-      backend_changed = util.deep_compare(backend, new_backend)
+      backend_changed = not util.deep_compare(backend, new_backend)
     end
 
     if backend_changed then

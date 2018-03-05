@@ -37,6 +37,7 @@ http {
 
     lua_shared_dict configuration_data 5M;
     lua_shared_dict round_robin_state 1M;
+    lua_shared_dict locks 512k;
 
     init_by_lua_block {
         require("resty.core")
