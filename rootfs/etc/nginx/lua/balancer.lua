@@ -1,5 +1,4 @@
 local ngx_balancer = require("ngx.balancer")
-local ngx_upstream = require("ngx.upstream")
 local json = require("cjson")
 local configuration = require("configuration")
 local util = require("util")
@@ -17,8 +16,10 @@ local backends = {}
 
 local function balance()
   local backend_name = ngx.var.proxy_upstream_name
-  local lb_alg = configuration.get_lb_alg(backend_name)
   local backend = backends[backend_name]
+  -- lb_alg field does not exist for ingress.Backend struct for now, so lb_alg
+  -- will always be round_robin
+  local lb_alg = backend.lb_alg or "round_robin"
 
   if lb_alg == "ip_hash" then
     -- TODO(elvinefendi) implement me
@@ -47,19 +48,28 @@ local function sync_backend(backend)
 end
 
 local function sync_backends()
-  local backend_names = configuration.get_backend_names()
+  local backends_data = configuration.get_backends_data()
+  if not backends_data then
+    return
+  end
 
-  for _, backend_name in pairs(backend_names) do
-    backend_data = configuration.get_backend_data(backend_name)
+  local ok, backends = pcall(json.decode, backends_data)
+  if not ok then
+    ngx.log(ngx.ERR,  "could not parse backends data: " .. tostring(backends))
+    return
+  end
 
-    local ok, backend = pcall(json.decode, backend_data)
+  for _, backend in pairs(backends) do
+    local current_backend = backends[backend.name]
+    local backend_changed = true
 
-    if ok then
-      if not util.deep_compare(backends[backend_name], backend, true) then
-        sync_backend(backend)
-      end
-    else
-      ngx.log(ngx.ERROR,  "could not parse backend_json: " .. tostring(backend))
+    if current_backend then
+      -- this might change in future but currently we react to only endpoints changes
+      backend_changed = util.deep_compare(current_backend.endpoints, backend.endpoints)
+    end
+
+    if backend_changed then
+      sync_backend(backend)
     end
   end
 end
@@ -67,7 +77,7 @@ end
 function _M.init_worker()
   _, err = ngx.timer.every(BACKENDS_SYNC_INTERVAL, sync_backends)
   if err then
-    ngx.log(ngx.ERROR, "error when setting up timer.every for sync_backends: " .. tostring(err))
+    ngx.log(ngx.ERR, "error when setting up timer.every for sync_backends: " .. tostring(err))
   end
 end
 
