@@ -281,7 +281,7 @@ func buildLogFormatUpstream(input interface{}) string {
 // (specified through the nginx.ingress.kubernetes.io/rewrite-to annotation)
 // If the annotation nginx.ingress.kubernetes.io/add-base-url:"true" is specified it will
 // add a base tag in the head of the response from the service
-func buildProxyPass(host string, b interface{}, loc interface{}) string {
+func buildProxyPass(host string, b interface{}, loc interface{}, dynamicConfigurationEnabled bool) string {
 	backends, ok := b.([]*ingress.Backend)
 	if !ok {
 		glog.Errorf("expected an '[]*ingress.Backend' type but %T was returned", b)
@@ -313,8 +313,11 @@ func buildProxyPass(host string, b interface{}, loc interface{}) string {
 	}
 
 	// defProxyPass returns the default proxy_pass, just the name of the upstream
-	//defProxyPass := fmt.Sprintf("proxy_pass %s://%s;", proto, upstreamName)
-	defProxyPass := fmt.Sprintf("proxy_pass %s://upstream_balancer;", proto)
+	defProxyPass := fmt.Sprintf("proxy_pass %s://%s;", proto, upstreamName)
+	if dynamicConfigurationEnabled {
+		defProxyPass = fmt.Sprintf("proxy_pass %s://upstream_balancer;", proto)
+	}
+
 	// if the path in the ingress rule is equals to the target: no special rewrite
 	if path == location.Rewrite.Target {
 		return defProxyPass
