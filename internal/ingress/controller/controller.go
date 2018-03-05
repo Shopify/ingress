@@ -192,6 +192,19 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 	incReloadCount()
 	setSSLExpireTime(servers)
 
+	if n.isForceReload() {
+		go func() {
+			// it takes time for Nginx to start listening on the port
+			time.Sleep(1 * time.Second)
+			err := n.ConfigureDynamically(&pcfg)
+			if err == nil {
+				glog.Infof("dynamic reconfiguration succeeded")
+			} else {
+				glog.Warningf("could not dynamically reconfigure: %v", err)
+			}
+		}()
+	}
+
 	n.runningConfig = &pcfg
 	n.SetForceReload(false)
 
