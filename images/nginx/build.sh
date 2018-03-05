@@ -166,6 +166,9 @@ get_src d4a9ed0d2405f41eb0178462b398afde8599c5115dcc1ff8f60e2f34a41a4c21 \
 get_src 92fd006d5ca3b3266847d33410eb280122a7f6c06334715f87acce064188a02e \
         "https://github.com/openresty/lua-resty-core/archive/v0.1.14rc1.tar.gz"
 
+get_src eaf84f58b43289c1c3e0442ada9ed40406357f203adc96e2091638080cb8d361 \
+        "https://github.com/openresty/lua-resty-lock/archive/v0.07.tar.gz"
+
 get_src 1ad2e34b111c802f9d0cdf019e986909123237a28c746b21295b63c9e785d9c3 \
         "http://luajit.org/download/LuaJIT-2.1.0-beta3.tar.gz"
 
@@ -195,6 +198,9 @@ cd "$BUILD_PATH/lua-resty-core-0.1.14rc1"
 make install
 
 cd "$BUILD_PATH/lua-resty-lrucache-0.07"
+make install
+
+cd "$BUILD_PATH/lua-resty-lock-0.07"
 make install
 
 # build opentracing lib
