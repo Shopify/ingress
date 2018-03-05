@@ -2,6 +2,7 @@ local ngx_balancer = require("ngx.balancer")
 local json = require("cjson")
 local configuration = require("configuration")
 local util = require("util")
+local lrucache = require("resty.lrucache")
 
 -- measured in seconds
 -- for an Nginx worker to pick up the new list of upstream peers 
@@ -12,18 +13,21 @@ local round_robin_state = ngx.shared.round_robin_state
 
 local _M = {}
 
-local backends = {}
+local backends, err = lrucache.new(1024)
+if not backends then
+  return error("failed to create the cache for backends: " .. (err or "unknown"))
+end
 
 local function balance()
   local backend_name = ngx.var.proxy_upstream_name
-  local backend = backends[backend_name]
+  local backend = backends:get(backend_name)
   -- lb_alg field does not exist for ingress.Backend struct for now, so lb_alg
   -- will always be round_robin
   local lb_alg = backend.lb_alg or "round_robin"
 
   if lb_alg == "ip_hash" then
     -- TODO(elvinefendi) implement me
-    return backends.endpoints[0].address, backends.endpoints[0].port
+    return backend.endpoints[0].address, backend.endpoints[0].port
   end
 
   -- Round-Robin
@@ -39,7 +43,7 @@ local function balance()
 end
 
 local function sync_backend(backend)
-  backends[backend.name] = backend
+  backends:set(backend.name, backend)
 
   -- also reset the respective balancer state since backend has changed
   round_robin_state:delete(backend.name)
@@ -53,23 +57,22 @@ local function sync_backends()
     return
   end
 
-  local ok, backends = pcall(json.decode, backends_data)
+  local ok, new_backends = pcall(json.decode, backends_data)
   if not ok then
     ngx.log(ngx.ERR,  "could not parse backends data: " .. tostring(backends))
     return
   end
 
-  for _, backend in pairs(backends) do
-    local current_backend = backends[backend.name]
+  for _, new_backend in pairs(new_backends) do
+    local backend = backends:get(new_backend.name)
     local backend_changed = true
 
-    if current_backend then
-      -- this might change in future but currently we react to only endpoints changes
-      backend_changed = util.deep_compare(current_backend.endpoints, backend.endpoints)
+    if backend then
+      backend_changed = util.deep_compare(backend, new_backend)
     end
 
     if backend_changed then
-      sync_backend(backend)
+      sync_backend(new_backend)
     end
   end
 end
