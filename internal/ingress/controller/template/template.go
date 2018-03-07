@@ -297,26 +297,27 @@ func buildProxyPass(host string, b interface{}, loc interface{}, dynamicConfigur
 	path := location.Path
 	proto := "http"
 
-	upstreamName := location.Backend
-	for _, backend := range backends {
-		if backend.Name == location.Backend {
-			if backend.Secure || backend.SSLPassthrough {
-				proto = "https"
-			}
+	upstreamName := "upstream_balancer"
 
-			if isSticky(host, location, backend.SessionAffinity.CookieSessionAffinity.Locations) {
-				upstreamName = fmt.Sprintf("sticky-%v", upstreamName)
-			}
+	if !dynamicConfigurationEnabled {
+		upstreamName = location.Backend
+		for _, backend := range backends {
+			if backend.Name == location.Backend {
+				if backend.Secure || backend.SSLPassthrough {
+					proto = "https"
+				}
 
-			break
+				if isSticky(host, location, backend.SessionAffinity.CookieSessionAffinity.Locations) {
+					upstreamName = fmt.Sprintf("sticky-%v", upstreamName)
+				}
+
+				break
+			}
 		}
 	}
 
 	// defProxyPass returns the default proxy_pass, just the name of the upstream
 	defProxyPass := fmt.Sprintf("proxy_pass %s://%s;", proto, upstreamName)
-	if dynamicConfigurationEnabled {
-		defProxyPass = fmt.Sprintf("proxy_pass %s://upstream_balancer;", proto)
-	}
 
 	// if the path in the ingress rule is equals to the target: no special rewrite
 	if path == location.Rewrite.Target {
