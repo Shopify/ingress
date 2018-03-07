@@ -747,7 +747,7 @@ func (n *NGINXController) setupSSLProxy() {
 	}()
 }
 
-// decide if the new configuration can be dynamically configured without reloading
+// IsDynamicallyConfigurable decides if the new configuration can be dynamically configured without reloading
 func (n *NGINXController) IsDynamicallyConfigurable(pcfg *ingress.Configuration) bool {
 	runningBackends := make([]*ingress.Backend, 0, len(n.runningConfig.Backends))
 	newBackends := make([]*ingress.Backend, 0, len(pcfg.Backends))
@@ -771,6 +771,8 @@ func (n *NGINXController) IsDynamicallyConfigurable(pcfg *ingress.Configuration)
 	return ret
 }
 
+// ConfigureDynamically JSON encodes new Backends and POSTs it to an internal HTTP endpoint
+// that is handled by Lua
 func (n *NGINXController) ConfigureDynamically(pcfg *ingress.Configuration) error {
 	buf, err := json.Marshal(pcfg.Backends)
 	if err != nil {

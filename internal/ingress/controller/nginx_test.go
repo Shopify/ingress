@@ -23,24 +23,24 @@ import (
 )
 
 func TestIsDynamicallyConfigurable(t *testing.T) {
-	backends := []*ingress.Backend{&ingress.Backend{
+	backends := []*ingress.Backend{{
 		Name: "fakenamespace-myapp-80",
 		Endpoints: []ingress.Endpoint{
-			ingress.Endpoint{
+			{
 				Address: "10.0.0.1",
 				Port:    "8080",
 			},
-			ingress.Endpoint{
+			{
 				Address: "10.0.0.2",
 				Port:    "8080",
 			},
 		},
 	}}
 
-	servers := []*ingress.Server{&ingress.Server{
+	servers := []*ingress.Server{{
 		Hostname: "myapp.fake",
 		Locations: []*ingress.Location{
-			&ingress.Location{
+			{
 				Path:    "/",
 				Backend: "fakenamespace-myapp-80",
 			},
@@ -62,15 +62,15 @@ func TestIsDynamicallyConfigurable(t *testing.T) {
 	}
 
 	newConfig = &ingress.Configuration{
-		Backends: []*ingress.Backend{&ingress.Backend{}},
-		Servers:  []*ingress.Server{&ingress.Server{}},
+		Backends: []*ingress.Backend{{}},
+		Servers:  []*ingress.Server{{}},
 	}
 	if n.IsDynamicallyConfigurable(newConfig) {
 		t.Errorf("Expected to not be dynamically configurable when there's more than just backends change")
 	}
 
 	newConfig = &ingress.Configuration{
-		Backends: []*ingress.Backend{&ingress.Backend{}},
+		Backends: []*ingress.Backend{{}},
 		Servers:  servers,
 	}
 	if !n.IsDynamicallyConfigurable(newConfig) {
