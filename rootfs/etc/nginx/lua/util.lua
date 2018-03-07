@@ -1,16 +1,8 @@
 local _M = {}
 
-function _M.split_pair(pair, seperator)
-  local i = pair:find(seperator)
-  if i == nil then
-    return pair, nil
-  else
-    local name = pair:sub(1, i - 1)
-    local value = pair:sub(i + 1, -1)
-    return name, value
-  end
-end
-
+-- this implementation is taken from
+-- https://web.archive.org/web/20131225070434/http://snippets.luacode.org/snippets/Deep_Comparison_of_Two_Values_3
+-- and modified for use in this project
 local function deep_compare(t1, t2, ignore_mt)
   local ty1 = type(t1)
   local ty2 = type(t2)
