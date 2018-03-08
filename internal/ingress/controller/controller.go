@@ -95,6 +95,8 @@ type Configuration struct {
 	FakeCertificateSHA  string
 
 	SyncRateLimit float32
+
+	DynamicConfigurationEnabled bool
 }
 
 // GetPublishService returns the configured service used to set ingress status
@@ -167,11 +169,21 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 	if !n.isForceReload() && n.runningConfig.Equal(&pcfg) {
 		glog.V(3).Infof("skipping backend reload (no changes detected)")
 		return nil
+	} else if !n.isForceReload() && n.cfg.DynamicConfigurationEnabled && n.IsDynamicallyConfigurable(&pcfg) {
+		err := n.ConfigureDynamically(&pcfg)
+		if err == nil {
+			glog.Infof("dynamic reconfiguration succeeded, skipping reload")
+			n.OnUpdate(pcfg, true)
+			n.runningConfig = &pcfg
+			return nil
+		}
+
+		glog.Warningf("falling back to reload, could not dynamically reconfigure: %v", err)
 	}
 
 	glog.Infof("backend reload required")
 
-	err := n.OnUpdate(pcfg)
+	err := n.OnUpdate(pcfg, false)
 	if err != nil {
 		incReloadErrorCount()
 		glog.Errorf("unexpected failure restarting the backend: \n%v", err)
@@ -181,6 +193,19 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 	glog.Infof("ingress backend successfully reloaded...")
 	incReloadCount()
 	setSSLExpireTime(servers)
+
+	if n.isForceReload() && n.cfg.DynamicConfigurationEnabled {
+		go func() {
+			// it takes time for Nginx to start listening on the port
+			time.Sleep(1 * time.Second)
+			err := n.ConfigureDynamically(&pcfg)
+			if err == nil {
+				glog.Infof("dynamic reconfiguration succeeded")
+			} else {
+				glog.Warningf("could not dynamically reconfigure: %v", err)
+			}
+		}()
+	}
 
 	n.runningConfig = &pcfg
 	n.SetForceReload(false)
