@@ -56,6 +56,9 @@ local function get_first_value(var)
 end
 _M.get_first_value = get_first_value
 
+-- this implementation is taken from:
+-- https://github.com/luafun/luafun/blob/master/fun.lua#L33
+-- accessed: March 13, 2018
 local function deepcopy(orig)
   local orig_type = type(orig)
   local copy

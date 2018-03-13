@@ -11,7 +11,7 @@ local DECAY_TIME = 10 -- this value is in seconds
 local LOCK_KEY = ":ewma_key"
 local PICK_SET_SIZE = 2
 
-local ewma_lock, err = resty_lock:new("locks", {timeout = 0, exptime = 0.1})
+local ewma_lock = resty_lock:new("locks", {timeout = 0, exptime = 0.1})
 
 local _M = {}
 
