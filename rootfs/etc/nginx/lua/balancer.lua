@@ -4,6 +4,7 @@ local configuration = require("configuration")
 local util = require("util")
 local lrucache = require("resty.lrucache")
 local resty_lock = require("resty.lock")
+local ewma = require("balancer.ewma")
 
 -- measured in seconds
 -- for an Nginx worker to pick up the new list of upstream peers 
@@ -41,6 +42,9 @@ local function balance()
   if lb_alg == "ip_hash" then
     -- TODO(elvinefendi) implement me
     return backend.endpoints[0].address, backend.endpoints[0].port
+  elseif lb_alg == "ewma" then
+    local endpoint = ewma.balance(backend.endpoints)
+    return endpoint.address, endpoint.port
   end
 
   if lb_alg ~= DEFAULT_LB_ALG then
@@ -66,6 +70,13 @@ local function sync_backend(backend)
 
   -- also reset the respective balancer state since backend has changed
   round_robin_state:delete(backend.name)
+
+  -- TODO: Reset state of EWMA per backend
+  local lb_alg = backend["load-balance"] or DEFAULT_LB_ALG
+  if lb_alg == "ewma" then
+    ngx.shared.balancer_ewma:flush_all()
+    ngx.shared.balancer_ewma_last_touched_at:flush_all()
+  end
 
   ngx.log(ngx.INFO, "syncronization completed for: " .. backend.name)
 end
@@ -100,6 +111,14 @@ function _M.init_worker()
   _, err = ngx.timer.every(BACKENDS_SYNC_INTERVAL, sync_backends)
   if err then
     ngx.log(ngx.ERR, "error when setting up timer.every for sync_backends: " .. tostring(err))
+  end
+end
+
+function _M.after_balance()
+  local lb_alg = get_current_lb_alg()
+  if lb_alg == "ewma" then
+    ngx.log(ngx.INFO, "executing ewma after balance")
+    ewma.after_balance()
   end
 end
 

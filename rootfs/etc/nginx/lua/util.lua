@@ -1,4 +1,5 @@
 local _M = {}
+local string_len = string.len
 
 -- this implementation is taken from
 -- https://web.archive.org/web/20131225070434/http://snippets.luacode.org/snippets/Deep_Comparison_of_Two_Values_3
@@ -23,5 +24,51 @@ local function deep_compare(t1, t2, ignore_mt)
   return true
 end
 _M.deep_compare = deep_compare
+
+local function is_blank(str)
+  return str == nil or string_len(str) == 0
+end
+_M.is_blank = is_blank
+
+-- http://nginx.org/en/docs/http/ngx_http_upstream_module.html#example
+-- CAVEAT: nginx is giving out : instead of , so the docs are wrong
+-- 127.0.0.1:26157 : 127.0.0.1:26157 , ngx.var.upstream_addr
+-- 200 : 200 , ngx.var.upstream_status
+-- 0.00 : 0.00, ngx.var.upstream_response_time
+local function split_upstream_var(var)
+  if not var then
+    return nil, nil
+  end
+  local t = {}
+  for v in var:gmatch("[^%s|,]+") do
+    if v ~= ":" then
+      t[#t+1] = v
+    end
+  end
+  return t
+end
+_M.split_upstream_var = split_upstream_var
+
+local function get_first_value(var)
+  local t = _M.split_upstream_var(var) or {}
+  if #t == 0 then return nil end
+  return t[1]
+end
+_M.get_first_value = get_first_value
+
+local function deepcopy(orig)
+  local orig_type = type(orig)
+  local copy
+  if orig_type == 'table' then
+      copy = {}
+      for orig_key, orig_value in next, orig, nil do
+          copy[deepcopy(orig_key)] = deepcopy(orig_value)
+      end
+  else
+      copy = orig
+  end
+  return copy
+end
+_M.deepcopy = deepcopy
 
 return _M
