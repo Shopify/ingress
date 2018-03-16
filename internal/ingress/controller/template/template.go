@@ -327,18 +327,19 @@ func buildProxyPass(host string, b interface{}, loc interface{}, dynamicConfigur
 
 	if !dynamicConfigurationEnabled {
 		upstreamName = location.Backend
-		for _, backend := range backends {
-			if backend.Name == location.Backend {
-				if backend.Secure || backend.SSLPassthrough {
-					proto = "https"
-				}
+	}
 
-				if isSticky(host, location, backend.SessionAffinity.CookieSessionAffinity.Locations) {
-					upstreamName = fmt.Sprintf("sticky-%v", upstreamName)
-				}
-
-				break
+	for _, backend := range backends {
+		if backend.Name == location.Backend {
+			if backend.Secure || backend.SSLPassthrough {
+				proto = "https"
 			}
+
+			if !dynamicConfigurationEnabled && isSticky(host, location, backend.SessionAffinity.CookieSessionAffinity.Locations) {
+				upstreamName = fmt.Sprintf("sticky-%v", upstreamName)
+			}
+
+			break
 		}
 	}
 

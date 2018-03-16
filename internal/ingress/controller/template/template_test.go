@@ -37,7 +37,7 @@ import (
 )
 
 var (
-	// TODO: add tests for secure endpoints
+	// TODO: add tests for SSLPassthrough
 	tmplFuncTestcases = map[string]struct {
 		Path                        string
 		Target                      string
@@ -48,7 +48,52 @@ var (
 		Sticky                      bool
 		XForwardedPrefix            bool
 		DynamicConfigurationEnabled bool
+		SecureBackend               bool
 	}{
+		"when secure backend enabled": {
+			"/",
+			"/",
+			"/",
+			"proxy_pass https://upstream-name;",
+			false,
+			"",
+			false,
+			false,
+			false,
+			true},
+		"when secure backend and stickeness enabled": {
+			"/",
+			"/",
+			"/",
+			"proxy_pass https://sticky-upstream-name;",
+			false,
+			"",
+			true,
+			false,
+			false,
+			true},
+		"when secure backend and dynamic config enabled": {
+			"/",
+			"/",
+			"/",
+			"proxy_pass https://upstream_balancer;",
+			false,
+			"",
+			false,
+			false,
+			true,
+			true},
+		"when secure backend, stickeness and dynamic config enabled": {
+			"/",
+			"/",
+			"/",
+			"proxy_pass https://upstream_balancer;",
+			false,
+			"",
+			true,
+			false,
+			true,
+			true},
 		"invalid redirect / to / with dynamic config enabled": {
 			"/",
 			"/",
@@ -58,7 +103,8 @@ var (
 			"",
 			false,
 			false,
-			true},
+			true,
+			false},
 		"invalid redirect / to /": {
 			"/",
 			"/",
@@ -66,6 +112,7 @@ var (
 			"proxy_pass http://upstream-name;",
 			false,
 			"",
+			false,
 			false,
 			false,
 			false},
@@ -79,6 +126,7 @@ var (
 	    `,
 			false,
 			"",
+			false,
 			false,
 			false,
 			false},
@@ -95,6 +143,7 @@ var (
 			"",
 			false,
 			false,
+			false,
 			false},
 		"redirect /end-with-slash/ to /not-root": {
 			"/end-with-slash/",
@@ -106,6 +155,7 @@ var (
 	    `,
 			false,
 			"",
+			false,
 			false,
 			false,
 			false},
@@ -121,6 +171,7 @@ var (
 			"",
 			false,
 			false,
+			false,
 			false},
 		"redirect / to /jenkins and rewrite": {
 			"/",
@@ -133,6 +184,7 @@ var (
 	    `,
 			true,
 			"",
+			false,
 			false,
 			false,
 			false},
@@ -150,6 +202,7 @@ var (
 			"",
 			false,
 			false,
+			false,
 			false},
 		"redirect /end-with-slash/ to /not-root and rewrite": {
 			"/end-with-slash/",
@@ -164,6 +217,7 @@ var (
 			"",
 			false,
 			false,
+			false,
 			false},
 		"redirect /something-complex to /not-root and rewrite": {
 			"/something-complex",
@@ -176,6 +230,7 @@ var (
 	    `,
 			true,
 			"",
+			false,
 			false,
 			false,
 			false},
@@ -193,6 +248,7 @@ var (
 			"http",
 			false,
 			false,
+			false,
 			false},
 		"redirect / to /something with sticky enabled": {
 			"/",
@@ -205,6 +261,7 @@ var (
 			false,
 			"http",
 			true,
+			false,
 			false,
 			false},
 		"redirect / to /something with sticky and dynamic config enabled": {
@@ -219,7 +276,8 @@ var (
 			"http",
 			true,
 			false,
-			true},
+			true,
+			false},
 		"add the X-Forwarded-Prefix header": {
 			"/there",
 			"/something",
@@ -233,6 +291,7 @@ var (
 			"http",
 			true,
 			true,
+			false,
 			false},
 	}
 )
@@ -282,22 +341,23 @@ func TestBuildProxyPass(t *testing.T) {
 			XForwardedPrefix: tc.XForwardedPrefix,
 		}
 
-		backends := []*ingress.Backend{}
+		backend := &ingress.Backend{
+			Name:   defaultBackend,
+			Secure: tc.SecureBackend,
+		}
+
 		if tc.Sticky {
-			backends = []*ingress.Backend{
-				{
-					Name: defaultBackend,
-					SessionAffinity: ingress.SessionAffinityConfig{
-						AffinityType: "cookie",
-						CookieSessionAffinity: ingress.CookieSessionAffinity{
-							Locations: map[string][]string{
-								defaultHost: {tc.Path},
-							},
-						},
+			backend.SessionAffinity = ingress.SessionAffinityConfig{
+				AffinityType: "cookie",
+				CookieSessionAffinity: ingress.CookieSessionAffinity{
+					Locations: map[string][]string{
+						defaultHost: {tc.Path},
 					},
 				},
 			}
 		}
+
+		backends := []*ingress.Backend{backend}
 
 		pp := buildProxyPass(defaultHost, backends, loc, tc.DynamicConfigurationEnabled)
 		if !strings.EqualFold(tc.ProxyPass, pp) {
