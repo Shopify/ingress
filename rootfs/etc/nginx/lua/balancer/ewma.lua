@@ -1,7 +1,8 @@
 -- Original Authors: Shiv Nagarajan & Scott Francis
 -- Accessed: March 12, 2018
 -- Inspiration drawn from:
--- https://github.com/twitter/finagle/blob/1bc837c4feafc0096e43c0e98516a8e1c50c4421/finagle-core/src/main/scala/com/twitter/finagle/loadbalancer/PeakEwma.scala
+-- https://github.com/twitter/finagle/blob/1bc837c4feafc0096e43c0e98516a8e1c50c4421/\
+-- finagle-core/src/main/scala/com/twitter/finagle/loadbalancer/PeakEwma.scala
 
 
 local resty_lock = require("resty.lock")
@@ -121,7 +122,7 @@ function _M.after_balance()
   if util.is_blank(upstream) then
     return
   end
-  
+
   get_or_update_ewma(upstream, rtt, true)
 end
 
