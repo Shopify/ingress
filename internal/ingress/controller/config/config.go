@@ -340,6 +340,10 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_gzip_module.html
 	UseGzip bool `json:"use-gzip,omitempty"`
 
+	// Enables or disables the use of the nginx geoip module that creates variables with values depending on the client IP
+	// http://nginx.org/en/docs/http/ngx_http_geoip_module.html
+	UseGeoIP bool `json:"use-geoip,omitempty"`
+
 	// Enables or disables the use of the NGINX Brotli Module for compression
 	// https://github.com/google/ngx_brotli
 	EnableBrotli bool `json:"enable-brotli,omitempty"`
@@ -486,6 +490,10 @@ type Configuration struct {
 	SyslogHost string `json:"syslog-host"`
 	// SyslogPort port
 	SyslogPort int `json:"syslog-port",omitempty`
+
+	// NoTLSRedirectLocations is a comma-separated list of locations
+	// that should not get redirected to TLS
+	NoTLSRedirectLocations string `json:"no-tls-redirect-locations"`
 }
 
 // NewDefault returns the default nginx configuration
@@ -542,6 +550,7 @@ func NewDefault() Configuration {
 		SSLSessionTimeout:          sslSessionTimeout,
 		EnableBrotli:               false,
 		UseGzip:                    true,
+		UseGeoIP:                   true,
 		WorkerProcesses:            strconv.Itoa(runtime.NumCPU()),
 		WorkerShutdownTimeout:      "10s",
 		LoadBalanceAlgorithm:       defaultLoadBalancerAlgorithm,
@@ -582,6 +591,7 @@ func NewDefault() Configuration {
 		JaegerSamplerParam:           "1",
 		LimitReqStatusCode:           503,
 		SyslogPort:                   514,
+		NoTLSRedirectLocations:       "/.well-known/acme-challenge",
 	}
 
 	if glog.V(5) {

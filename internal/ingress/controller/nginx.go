@@ -770,6 +770,8 @@ func (n *NGINXController) ConfigureDynamically(pcfg *ingress.Configuration) erro
 		return err
 	}
 
+	glog.V(2).Infof("posting backends configuration: %s", buf)
+
 	url := fmt.Sprintf("http://localhost:%d/configuration/backends", n.cfg.ListenPorts.Status)
 	resp, err := http.Post(url, "application/json", bytes.NewReader(buf))
 	if err != nil {

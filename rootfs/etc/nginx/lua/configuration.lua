@@ -1,6 +1,4 @@
--- key's are always going to be ngx.var.proxy_upstream_name, a uniqueue identifier of an app's Backend object
--- currently it is built our of namepsace, service name and service port
--- value is JSON encoded ingress.Backend object.Backend object, for more info refer to internal//ingress/types.go
+-- this is the Lua representation of Configuration struct in internal/ingress/types.go
 local configuration_data = ngx.shared.configuration_data
 
 local _M = {}
@@ -9,18 +7,22 @@ function _M.get_backends_data()
   return configuration_data:get("backends")
 end
 
-function _M.get_backend_names()
-  -- 0 here means get all the keys which can be slow if there are many keys
-  -- TODO(elvinefendi) think about storing comma separated backend names in another dictionary and using that to
-  -- fetch the list of them here insted of blocking the access to shared dictionary
-  return backends_data:get_keys(0)
-end
-
 function _M.call()
-  if ngx.var.request_method ~= "POST" or ngx.var.request_uri ~= "/configuration/backends" then
-    ngx.status = 404
-    ngx.print("Not found!")
+  if ngx.var.request_method ~= "POST" and ngx.var.request_method ~= "GET" then
+    ngx.status = ngx.HTTP_BAD_REQUEST
+    ngx.print("Only POST and GET requests are allowed!")
+    return
+  end
 
+  if ngx.var.request_uri ~= "/configuration/backends" then
+    ngx.status = ngx.HTTP_NOT_FOUND
+    ngx.print("Not found!")
+    return
+  end
+
+  if ngx.var.request_method == "GET" then
+    ngx.status = ngx.HTTP_OK
+    ngx.print(_M.get_backends_data())
     return
   end
 
@@ -29,11 +31,11 @@ function _M.call()
   local success, err = configuration_data:set("backends", ngx.req.get_body_data())
   if not success then
     ngx.log(ngx.ERR, "error while saving configuration: " .. tostring(err))
-    ngx.status = 400
+    ngx.status = ngx.HTTP_BAD_REQUEST
     return
   end
 
-  ngx.status = 201
+  ngx.status = ngx.HTTP_CREATED
 end
 
 return _M

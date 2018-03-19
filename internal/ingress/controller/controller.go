@@ -173,7 +173,6 @@ func (n *NGINXController) syncIngress(item interface{}) error {
 		err := n.ConfigureDynamically(&pcfg)
 		if err == nil {
 			glog.Infof("dynamic reconfiguration succeeded, skipping reload")
-			n.OnUpdate(pcfg, true)
 			n.runningConfig = &pcfg
 			return nil
 		}
