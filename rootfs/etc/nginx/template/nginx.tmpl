@@ -596,6 +596,7 @@ stream {
 
 {{/* definition of templates to avoid repetitions */}}
 {{ define "CUSTOM_ERRORS" }}
+        {{ $dynamicConfig := .DynamicConfigurationEnabled}}
         {{ $proxySetHeaders := .ProxySetHeaders }}
         {{ range $errCode := .Cfg.CustomHTTPErrors }}
         location @custom_{{ $errCode }} {
@@ -612,7 +613,7 @@ stream {
 
             rewrite                (.*) / break;
 
-            {{ if .DynamicConfigurationEnabled }}
+            {{ if $dynamicConfig }}
             proxy_pass            http://upstream_balancer;
             {{ else }}
             proxy_pass            http://upstream-default-backend;
@@ -751,6 +752,21 @@ stream {
             client_max_body_size        "{{ $location.Proxy.BodySize }}";
             {{ if isValidClientBodyBufferSize $location.ClientBodyBufferSize }}
             client_body_buffer_size     {{ $location.ClientBodyBufferSize }};
+            {{ end }}
+
+            # Pass the extracted client certificate to the auth provider
+            {{ if not (empty $server.CertificateAuth.CAFileName) }}
+            {{ if $server.CertificateAuth.PassCertToUpstream }}
+            proxy_set_header ssl-client-cert        $ssl_client_escaped_cert;
+            {{ else }}
+            proxy_set_header ssl-client-cert        "";
+            {{ end }}
+            proxy_set_header ssl-client-verify      $ssl_client_verify;
+            proxy_set_header ssl-client-dn          $ssl_client_s_dn;
+            {{ else }}
+            proxy_set_header ssl-client-cert        "";
+            proxy_set_header ssl-client-verify      "";
+            proxy_set_header ssl-client-dn          "";
             {{ end }}
 
             set $target {{ $location.ExternalAuth.URL }};
