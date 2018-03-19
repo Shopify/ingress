@@ -83,6 +83,7 @@ http {
     set_real_ip_from    {{ $trusted_ip }};
     {{ end }}
 
+    {{ if $cfg.UseGeoIP }}
     {{/* databases used to determine the country depending on the client IP address */}}
     {{/* http://nginx.org/en/docs/http/ngx_http_geoip_module.html */}}
     {{/* this is require to calculate traffic for individual country using GeoIP in the status page */}}
@@ -90,6 +91,7 @@ http {
     geoip_city          /etc/nginx/geoip/GeoLiteCity.dat;
     geoip_org           /etc/nginx/geoip/GeoIPASNum.dat;
     geoip_proxy_recursive on;
+    {{ end }}
 
     {{ if $cfg.EnableVtsStatus }}
     vhost_traffic_status_zone shared:vhost_traffic_status:{{ $cfg.VtsStatusZoneSize }};
@@ -137,7 +139,7 @@ http {
     {{ if $cfg.EnableOpentracing }}
     opentracing on;
     {{ end }}
-    
+
     {{ buildOpentracing $cfg }}
 
     include /etc/nginx/mime.types;
@@ -343,6 +345,7 @@ http {
     {{ $cfg.HTTPSnippet }}
     {{ end }}
 
+    {{ if not $all.DynamicConfigurationEnabled }}
     {{ range $name, $upstream := $backends }}
     {{ if eq $upstream.SessionAffinity.AffinityType "cookie" }}
     upstream sticky-{{ $upstream.Name }} {
@@ -354,9 +357,7 @@ http {
 
         {{ range $server := $upstream.Endpoints }}server {{ $server.Address | formatIP }}:{{ $server.Port }} max_fails={{ $server.MaxFails }} fail_timeout={{ $server.FailTimeout }};
         {{ end }}
-
     }
-
     {{ end }}
 
     upstream {{ $upstream.Name }} {
@@ -369,7 +370,7 @@ http {
         {{ range $server := $upstream.Endpoints }}server {{ $server.Address | formatIP }}:{{ $server.Port }} max_fails={{ $server.MaxFails }} fail_timeout={{ $server.FailTimeout }};
         {{ end }}
     }
-
+    {{ end }}
     {{ end }}
 
     upstream upstream_balancer {
@@ -498,6 +499,11 @@ http {
         }
 
         location /configuration {
+            allow 127.0.0.1;
+            {{ if $IsIPV6Enabled }}
+            allow ::1;
+            {{ end }}
+            deny all;
             content_by_lua_block {
               configuration.call()
             }
@@ -508,7 +514,11 @@ http {
             proxy_set_header    X-Code 404;
             {{ end }}
             set $proxy_upstream_name "upstream-default-backend";
+            {{ if $all.DynamicConfigurationEnabled }}
+            proxy_pass          http://upstream_balancer;
+            {{ else }}
             proxy_pass          http://upstream-default-backend;
+            {{ end }}
         }
 
         {{ template "CUSTOM_ERRORS" $all }}
@@ -601,7 +611,12 @@ stream {
             proxy_set_header       X-Service-Name     $service_name;
 
             rewrite                (.*) / break;
-            proxy_pass             http://upstream-default-backend;
+
+            {{ if .DynamicConfigurationEnabled }}
+            proxy_pass            http://upstream_balancer;
+            {{ else }}
+            proxy_pass            http://upstream-default-backend;
+            {{ end }}
         }
         {{ end }}
 {{ end }}
@@ -769,6 +784,7 @@ stream {
 
             {{/* redirect to HTTPS can be achieved forcing the redirect or having a SSL Certificate configured for the server */}}
             {{ if (or $location.Rewrite.ForceSSLRedirect (and (not (empty $server.SSLCertificate)) $location.Rewrite.SSLRedirect)) }}
+            {{ if not (isLocationInLocationList $location $all.Cfg.NoTLSRedirectLocations) }}
             # enforce ssl on server side
             if ($redirect_to_https) {
                 {{ if $location.UsePortInRedirects }}
@@ -781,6 +797,7 @@ stream {
                 return {{ $all.Cfg.HTTPRedirectCode }} https://$best_http_host$request_uri;
                 {{ end }}
             }
+            {{ end }}
             {{ end }}
 
             {{ if $all.Cfg.EnableModsecurity }}

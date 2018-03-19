@@ -18,7 +18,7 @@ all: all-container
 BUILDTAGS=
 
 # Use the 0.0 tag for testing, it shouldn't clobber any release builds
-TAG?=0.11.0
+TAG?=0.12.0
 REGISTRY?=quay.io/kubernetes-ingress-controller
 GOOS?=linux
 DOCKER?=gcloud docker --
@@ -179,6 +179,10 @@ cover:
 .PHONY: vet
 vet:
 	@go vet $(shell go list ${PKG}/... | grep -v vendor)
+
+.PHONY: luacheck
+luacheck:
+	luacheck -q ./rootfs/etc/nginx/lua/
 
 .PHONY: release
 release: all-container all-push
