@@ -628,6 +628,15 @@ func (n *NGINXController) createUpstreams(data []*extensions.Ingress, du *ingres
 			if upstreams[defBackend].LoadBalancing == "" {
 				upstreams[defBackend].LoadBalancing = anns.LoadBalancing
 			}
+			if upstreams[defBackend].SessionAffinity.AffinityType == "" {
+				upstreams[defBackend].SessionAffinity.AffinityType = anns.SessionAffinity.Type
+			}
+			if upstreams[defBackend].SessionAffinity.CookieSessionAffinity.Name == "" {
+				upstreams[defBackend].SessionAffinity.CookieSessionAffinity.Name = anns.SessionAffinity.Cookie.Name
+			}
+			if upstreams[defBackend].SessionAffinity.CookieSessionAffinity.Hash == "" {
+				upstreams[defBackend].SessionAffinity.CookieSessionAffinity.Hash = anns.SessionAffinity.Cookie.Hash
+			}
 
 			svcKey := fmt.Sprintf("%v/%v", ing.GetNamespace(), ing.Spec.Backend.ServiceName)
 
@@ -685,6 +694,18 @@ func (n *NGINXController) createUpstreams(data []*extensions.Ingress, du *ingres
 
 				if upstreams[name].LoadBalancing == "" {
 					upstreams[name].LoadBalancing = anns.LoadBalancing
+				}
+
+				if upstreams[name].SessionAffinity.AffinityType == "" {
+					upstreams[name].SessionAffinity.AffinityType = anns.SessionAffinity.Type
+				}
+
+				if upstreams[name].SessionAffinity.CookieSessionAffinity.Name == "" {
+					upstreams[name].SessionAffinity.CookieSessionAffinity.Name = anns.SessionAffinity.Cookie.Name
+				}
+
+				if upstreams[name].SessionAffinity.CookieSessionAffinity.Hash == "" {
+					upstreams[name].SessionAffinity.CookieSessionAffinity.Hash = anns.SessionAffinity.Cookie.Hash
 				}
 
 				svcKey := fmt.Sprintf("%v/%v", ing.GetNamespace(), path.Backend.ServiceName)
