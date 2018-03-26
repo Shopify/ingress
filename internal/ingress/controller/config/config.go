@@ -489,7 +489,7 @@ type Configuration struct {
 	// SyslogHost FQDN or IP address where the logs should be sent
 	SyslogHost string `json:"syslog-host"`
 	// SyslogPort port
-	SyslogPort int `json:"syslog-port",omitempty`
+	SyslogPort int `json:"syslog-port"`
 
 	// NoTLSRedirectLocations is a comma-separated list of locations
 	// that should not get redirected to TLS
@@ -561,23 +561,24 @@ func NewDefault() Configuration {
 		UseHTTP2:                   true,
 		ProxyStreamTimeout:         "600s",
 		Backend: defaults.Backend{
-			ProxyBodySize:         bodySize,
-			ProxyConnectTimeout:   5,
-			ProxyReadTimeout:      60,
-			ProxySendTimeout:      60,
-			ProxyBufferSize:       "4k",
-			ProxyCookieDomain:     "off",
-			ProxyCookiePath:       "off",
-			ProxyNextUpstream:     "error timeout invalid_header http_502 http_503 http_504",
-			ProxyRequestBuffering: "on",
-			ProxyRedirectFrom:     "off",
-			SSLRedirect:           true,
-			CustomHTTPErrors:      []int{},
-			WhitelistSourceRange:  []string{},
-			SkipAccessLogURLs:     []string{},
-			LimitRate:             0,
-			LimitRateAfter:        0,
-			ProxyBuffering:        "off",
+			ProxyBodySize:          bodySize,
+			ProxyConnectTimeout:    5,
+			ProxyReadTimeout:       60,
+			ProxySendTimeout:       60,
+			ProxyBufferSize:        "4k",
+			ProxyCookieDomain:      "off",
+			ProxyCookiePath:        "off",
+			ProxyNextUpstream:      "error timeout invalid_header http_502 http_503 http_504",
+			ProxyNextUpstreamTries: 0,
+			ProxyRequestBuffering:  "on",
+			ProxyRedirectFrom:      "off",
+			SSLRedirect:            true,
+			CustomHTTPErrors:       []int{},
+			WhitelistSourceRange:   []string{},
+			SkipAccessLogURLs:      []string{},
+			LimitRate:              0,
+			LimitRateAfter:         0,
+			ProxyBuffering:         "off",
 		},
 		UpstreamKeepaliveConnections: 32,
 		LimitConnZoneVariable:        defaultLimitConnZoneVariable,

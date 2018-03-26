@@ -452,7 +452,7 @@ Error: %v
 // 2. write the custom template (the complexity depends on the implementation)
 // 3. write the configuration file
 //
-// returning nill implies the backend will be reloaded.
+// returning nil implies the backend will be reloaded.
 // if an error is returned means requeue the update
 func (n *NGINXController) OnUpdate(ingressCfg ingress.Configuration, skipReload bool) error {
 	cfg := n.store.GetBackendConfiguration()
@@ -765,7 +765,15 @@ func (n *NGINXController) IsDynamicallyConfigurable(pcfg *ingress.Configuration)
 // ConfigureDynamically JSON encodes new Backends and POSTs it to an internal HTTP endpoint
 // that is handled by Lua
 func (n *NGINXController) ConfigureDynamically(pcfg *ingress.Configuration) error {
-	buf, err := json.Marshal(pcfg.Backends)
+	backends := make([]*ingress.Backend, len(pcfg.Backends))
+
+	for i, backend := range pcfg.Backends {
+		cleanedupBackend := *backend
+		cleanedupBackend.Service = nil
+		backends[i] = &cleanedupBackend
+	}
+
+	buf, err := json.Marshal(backends)
 	if err != nil {
 		return err
 	}

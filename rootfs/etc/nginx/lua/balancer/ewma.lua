@@ -1,8 +1,8 @@
 -- Original Authors: Shiv Nagarajan & Scott Francis
 -- Accessed: March 12, 2018
 -- Inspiration drawn from:
--- https://github.com/twitter/finagle/blob/1bc837c4feafc0096e43c0e98516a8e1c50c4421/\
--- finagle-core/src/main/scala/com/twitter/finagle/loadbalancer/PeakEwma.scala
+-- https://github.com/twitter/finagle/blob/1bc837c4feafc0096e43c0e98516a8e1c50c4421
+--   /finagle-core/src/main/scala/com/twitter/finagle/loadbalancer/PeakEwma.scala
 
 
 local resty_lock = require("resty.lock")
@@ -63,8 +63,21 @@ local function get_or_update_ewma(upstream, rtt, update)
     return ewma, nil
   end
 
-  ngx.shared.balancer_ewma_last_touched_at:set(upstream, now)
-  ngx.shared.balancer_ewma:set(upstream, ewma)
+  local success, err, forcible = ngx.shared.balancer_ewma_last_touched_at:set(upstream, now)
+  if not success then
+    ngx.log(ngx.WARN, "balancer_ewma_last_touched_at:set failed " .. err)
+  end
+  if forcible then
+    ngx.log(ngx.WARN, "balancer_ewma_last_touched_at:set valid items forcibly overwritten")
+  end
+
+  success, err, forcible = ngx.shared.balancer_ewma:set(upstream, ewma)
+  if not success then
+    ngx.log(ngx.WARN, "balancer_ewma:set failed " .. err)
+  end
+  if forcible then
+    ngx.log(ngx.WARN, "balancer_ewma:set valid items forcibly overwritten")
+  end
 
   unlock()
   return ewma, nil
@@ -122,7 +135,6 @@ function _M.after_balance()
   if util.is_blank(upstream) then
     return
   end
-
   get_or_update_ewma(upstream, rtt, true)
 end
 

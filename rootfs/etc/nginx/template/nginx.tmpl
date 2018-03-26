@@ -380,7 +380,9 @@ http {
           balancer.call()
         }
 
-        keepalive 1000;
+        {{ if (gt $cfg.UpstreamKeepaliveConnections 0) }}
+        keepalive {{ $cfg.UpstreamKeepaliveConnections }};
+        {{ end }}
     }
 
     {{/* build the maps that will be use to validate the Whitelist */}}
@@ -762,11 +764,13 @@ stream {
             proxy_set_header ssl-client-cert        "";
             {{ end }}
             proxy_set_header ssl-client-verify      $ssl_client_verify;
-            proxy_set_header ssl-client-dn          $ssl_client_s_dn;
+            proxy_set_header ssl-client-subject-dn  $ssl_client_s_dn;
+            proxy_set_header ssl-client-issuer-dn   $ssl_client_i_dn;
             {{ else }}
             proxy_set_header ssl-client-cert        "";
             proxy_set_header ssl-client-verify      "";
-            proxy_set_header ssl-client-dn          "";
+            proxy_set_header ssl-client-client-dn   "";
+            proxy_set_header ssl-client-subject-dn  "";
             {{ end }}
 
             set $target {{ $location.ExternalAuth.URL }};
@@ -792,7 +796,7 @@ stream {
 
             set $proxy_upstream_name "{{ buildUpstreamName $server.Hostname $all.Backends $location }}";
 
-            {{ $ing := (getIngressInformation $location.Ingress $path) }}
+            {{ $ing := (getIngressInformation $location.Ingress $location.Path) }}
             {{/* $ing.Metadata contains the Ingress metadata */}}
             set $namespace      "{{ $ing.Namespace }}";
             set $ingress_name   "{{ $ing.Rule }}";
@@ -892,11 +896,13 @@ stream {
             proxy_set_header ssl-client-cert        "";
             {{ end }}
             proxy_set_header ssl-client-verify      $ssl_client_verify;
-            proxy_set_header ssl-client-dn          $ssl_client_s_dn;
+            proxy_set_header ssl-client-subject-dn  $ssl_client_s_dn;
+            proxy_set_header ssl-client-issuer-dn   $ssl_client_i_dn;
             {{ else }}
             proxy_set_header ssl-client-cert        "";
             proxy_set_header ssl-client-verify      "";
-            proxy_set_header ssl-client-dn          "";
+            proxy_set_header ssl-client-subject-dn  "";
+            proxy_set_header ssl-client-issuer-dn   "";
             {{ end }}
 
             # Allow websocket connections
@@ -947,6 +953,7 @@ stream {
 
             # In case of errors try the next upstream server before returning an error
             proxy_next_upstream                     {{ buildNextUpstream $location.Proxy.NextUpstream $all.Cfg.RetryNonIdempotent }};
+            proxy_next_upstream_tries               {{ $location.Proxy.NextUpstreamTries }};
 
             {{/* rewrite only works if the content is not compressed */}}
             {{ if $location.Rewrite.AddBaseURL }}
@@ -973,7 +980,7 @@ stream {
             {{ if not (empty $location.Backend) }}
             {{ if $all.DynamicConfigurationEnabled}}
             log_by_lua_block {
-                balancer.after_balance()
+                balancer.call()
             }
             {{ end }}
             {{ buildProxyPass $server.Hostname $all.Backends $location $all.DynamicConfigurationEnabled }}
