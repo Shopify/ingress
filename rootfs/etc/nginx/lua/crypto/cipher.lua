@@ -12,7 +12,6 @@ local _M = {}
 
 function _M.md5_digest(raw, eof)
   md5:update(raw)
-  
   if eof then
     return md5:final()
   end
@@ -20,7 +19,7 @@ function _M.md5_digest(raw, eof)
 end
 
 function _M.sha1_digest(raw, eof)
-  local ok = sha1:update(raw)
+  sha1:update(raw)
   if eof then
       return sha1:final()
   end
