@@ -39,10 +39,8 @@ function _M.split_upstream_var(var)
     return nil, nil
   end
   local t = {}
-  for v in var:gmatch("[^%s|,]+") do
-    if v ~= ":" then
-      t[#t+1] = v
-    end
+  for v in var:gmatch("[^:]+") do
+    t[#t+1] = v 
   end
   return t
 end
