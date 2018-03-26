@@ -3,7 +3,6 @@ local util = require("util")
 
 local sticky_hosts = ngx.shared.sticky_hosts
 
-local DEFAULT_HASH = "md5"
 local DEFAULT_STICKY_COOKIE = "route"
 -- Currently STICKY_TIMEOUT never expires
 local STICKY_TIMEOUT = 0
@@ -17,15 +16,6 @@ local function get_sticky_cookie_name(backend)
     route = DEFAULT_STICKY_COOKIE
   end
   return route
-end
-
-local function get_sticky_cookie_hash(backend)
-  local hash = backend["sessionAffinityConfig"]["cookieSessionAffinity"]["hash"]
-  if hash == nil or hash ~= "sha1" then 
-    ngx.log(ngx.WARN, "nginx.ingress.kubernetes.io/session-cookie-hash defined incorrectly, defaulting to \"md5\"")
-    hash = DEFAULT_HASH
-  end
-  return hash
 end
 
 local function is_valid_upstream(backend, address, port)
@@ -70,10 +60,10 @@ end
 
 function _M.set_sticky_upstream(endpoint, backend)
   local cookie_name = get_sticky_cookie_name(backend)
-  local hash = get_sticky_cookie_hash(backend)
   local upstream = endpoint.address .. ":" .. endpoint.port
   local encrypted
-  if hash == "sha1" then
+
+  if backend["sessionAffinityConfig"]["cookieSessionAffinity"]["hash"] == "sha1" then
     encrypted = cipher.to_hex(cipher.sha1_digest(upstream, true))
   else
     encrypted = cipher.to_hex(cipher.md5_digest(upstream, true))
