@@ -44,7 +44,7 @@ http {
     lua_shared_dict locks 512k;
     lua_shared_dict balancer_ewma 1M;
     lua_shared_dict balancer_ewma_last_touched_at 1M;
-    lua_shared_dict sticky_hosts 1M;
+    lua_shared_dict sticky_sessions 1M;
 
     init_by_lua_block {
         require("resty.core")

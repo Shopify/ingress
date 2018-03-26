@@ -1,21 +1,21 @@
 local cipher = require("crypto.cipher")
 local util = require("util")
 
-local sticky_hosts = ngx.shared.sticky_hosts
+local sticky_sessions = ngx.shared.sticky_sessions
 
-local DEFAULT_STICKY_COOKIE = "route"
+local DEFAULT_SESSION_COOKIE_NAME = "route"
 -- Currently STICKY_TIMEOUT never expires
 local STICKY_TIMEOUT = 0
 
 local _M = {}
 
-local function get_sticky_cookie_name(backend)
-  local route = backend["sessionAffinityConfig"]["cookieSessionAffinity"]["name"]
-  if route == nil then 
+local function get_cookie_name(backend)
+  local name = backend["sessionAffinityConfig"]["cookieSessionAffinity"]["name"]
+  if name == nil then 
     ngx.log(ngx.WARN, "nginx.ingress.kubernetes.io/session-cookie-name not defined, defaulting to \"route\"")
-    route = DEFAULT_STICKY_COOKIE
+    route = DEFAULT_SESSION_COOKIE_NAME
   end
-  return route
+  return name
 end
 
 local function is_valid_upstream(backend, address, port)
@@ -35,8 +35,8 @@ function _M.is_sticky(backend)
   return false
 end
 
-function _M.get_sticky_upstream(backend)
-  local cookie_name = get_sticky_cookie_name(backend)
+function _M.get_upstream(backend)
+  local cookie_name = get_cookie_name(backend)
   local cookie_key = "cookie_" .. cookie_name
   local upstream_key = ngx.var[cookie_key]
   if upstream_key == nil then
@@ -44,9 +44,9 @@ function _M.get_sticky_upstream(backend)
     return nil
   end
 
-  local upstream_string = sticky_hosts:get(upstream_key)
+  local upstream_string = sticky_sessions:get(upstream_key)
   if upstream_string == nil then
-    ngx.log(ngx.INFO, "sticky_hosts:get returned nil")
+    ngx.log(ngx.INFO, "sticky_sessions:get returned nil")
     return nil
   end
 
@@ -58,8 +58,8 @@ function _M.get_sticky_upstream(backend)
   return upstream
 end
 
-function _M.set_sticky_upstream(endpoint, backend)
-  local cookie_name = get_sticky_cookie_name(backend)
+function _M.set_upstream(endpoint, backend)
+  local cookie_name = get_cookie_name(backend)
   local upstream = endpoint.address .. ":" .. endpoint.port
   local encrypted
 
@@ -72,12 +72,12 @@ function _M.set_sticky_upstream(endpoint, backend)
   ngx.header["Set-Cookie"] = cookie_name .. "=" .. encrypted .. ";"
 
   local upstream = endpoint.address .. ":" .. endpoint.port
-  success, err, forcible = sticky_hosts:set(encrypted, upstream, STICKY_TIMEOUT)
+  success, err, forcible = sticky_sessions:set(encrypted, upstream, STICKY_TIMEOUT)
   if not success then
-    ngx.log(ngx.WARN, "sticky_hosts:set failed " .. err)
+    ngx.log(ngx.WARN, "sticky_sessions:set failed " .. err)
   end
   if forcible then
-    ngx.log(ngx.WARN, "sticky_hosts:set valid items forcibly overwritten")
+    ngx.log(ngx.WARN, "sticky_sessions:set valid items forcibly overwritten")
   end
 end
 
