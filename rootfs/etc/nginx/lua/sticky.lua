@@ -1,4 +1,4 @@
-local crypto = require("crypto")
+local cipher = require("crypto.cipher")
 local util = require("util")
 
 local sticky_hosts = ngx.shared.sticky_hosts
@@ -34,6 +34,7 @@ local function is_valid_upstream(backend, address, port)
       return true
     end
   end
+  ngx.log(ngx.INFO, "session upstream no longer valid, resetting")
   return false
 end
 
@@ -49,7 +50,7 @@ function _M.get_sticky_upstream(backend)
   local cookie_key = "cookie_" .. cookie_name
   local upstream_key = ngx.var[cookie_key]
   if upstream_key == nil then
-    ngx.log(ngx.INFO, "Cookie \"" .. cookie_name .. "\" does not exists")
+    ngx.log(ngx.INFO, "cookie \"" .. cookie_name .. "\" does not exists")
     return nil
   end
 
@@ -58,7 +59,7 @@ function _M.get_sticky_upstream(backend)
     ngx.log(ngx.INFO, "sticky_hosts:get returned nil")
     return nil
   end
-  
+
   local upstream = util.split_upstream_var(upstream_string)
   local valid = is_valid_upstream(backend, upstream[1], upstream[2])
   if not valid then
@@ -73,9 +74,9 @@ function _M.set_sticky_upstream(endpoint, backend)
   local upstream = endpoint.address .. ":" .. endpoint.port
   local encrypted
   if hash == "sha1" then
-    encrypted = crypto.to_hex(crypto.sha1_hash(upstream))
+    encrypted = cipher.to_hex(cipher.sha1_digest(upstream, true))
   else
-    encrypted = crypto.to_hex(crypto.md5_hash(upstream))
+    encrypted = cipher.to_hex(cipher.md5_digest(upstream, true))
   end
 
   ngx.header["Set-Cookie"] = cookie_name .. "=" .. encrypted .. ";"
