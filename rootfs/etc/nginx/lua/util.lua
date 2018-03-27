@@ -25,17 +25,16 @@ local function deep_compare(t1, t2, ignore_mt)
 end
 _M.deep_compare = deep_compare
 
-local function is_blank(str)
+function _M.is_blank(str)
   return str == nil or string_len(str) == 0
 end
-_M.is_blank = is_blank
 
 -- http://nginx.org/en/docs/http/ngx_http_upstream_module.html#example
 -- CAVEAT: nginx is giving out : instead of , so the docs are wrong
 -- 127.0.0.1:26157 : 127.0.0.1:26157 , ngx.var.upstream_addr
 -- 200 : 200 , ngx.var.upstream_status
 -- 0.00 : 0.00, ngx.var.upstream_response_time
-local function split_upstream_var(var)
+function _M.split_upstream_var(var)
   if not var then
     return nil, nil
   end
@@ -47,18 +46,16 @@ local function split_upstream_var(var)
   end
   return t
 end
-_M.split_upstream_var = split_upstream_var
 
-local function get_first_value(var)
+function _M.get_first_value(var)
   local t = _M.split_upstream_var(var) or {}
   if #t == 0 then return nil end
   return t[1]
 end
-_M.get_first_value = get_first_value
 
 -- this implementation is taken from:
 -- https://github.com/luafun/luafun/blob/master/fun.lua#L33
--- accessed: March 13, 2018
+-- SHA: 04c99f9c393e54a604adde4b25b794f48104e0d0
 local function deepcopy(orig)
   local orig_type = type(orig)
   local copy

@@ -59,7 +59,14 @@ local function balance()
     index = 1
     endpoint = backend.endpoints[index]
   end
-  round_robin_state:set(backend.name, index)
+  local success, forcible
+  success, err, forcible = round_robin_state:set(backend.name, index)
+  if not success then
+    ngx.log(ngx.WARN, "round_robin_state:set failed " .. err)
+  end
+  if forcible then
+    ngx.log(ngx.WARN, "round_robin_state:set valid items forcibly overwritten")
+  end
   round_robin_lock:unlock(backend.name .. ROUND_ROBIN_LOCK_KEY)
 
   return endpoint.address, endpoint.port
@@ -107,6 +114,13 @@ local function sync_backends()
   end
 end
 
+local function after_balance()
+  local lb_alg = get_current_lb_alg()
+  if lb_alg == "ewma" then
+    ewma.after_balance()
+  end
+end
+
 function _M.init_worker()
   _, err = ngx.timer.every(BACKENDS_SYNC_INTERVAL, sync_backends)
   if err then
@@ -123,6 +137,15 @@ function _M.after_balance()
 end
 
 function _M.call()
+  local phase = ngx.get_phase()
+  if phase == "log" then
+    after_balance()
+    return
+  end
+  if phase ~= "balancer" then
+    return error("must be called in balancer or log, but was called in: " .. phase)
+  end
+
   ngx_balancer.set_more_tries(1)
 
   local host, port = balance()
@@ -130,8 +153,10 @@ function _M.call()
   local ok
   ok, err = ngx_balancer.set_current_peer(host, port)
   if ok then
-    local message = string.format("current peer is set to %s:%s using lb_alg %s", host, port, get_current_lb_alg())
-    ngx.log(ngx.INFO,  message)
+    ngx.log(
+      ngx.INFO,
+      "current peer is set to " .. host .. ":" .. port .. " using lb_alg " .. tostring(get_current_lb_alg())
+    )
   else
     ngx.log(ngx.ERR, "error while setting current upstream peer to: " .. tostring(err))
   end

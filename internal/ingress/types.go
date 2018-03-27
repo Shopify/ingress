@@ -84,7 +84,7 @@ type Backend struct {
 	SSLPassthrough bool `json:"sslPassthrough"`
 	// Endpoints contains the list of endpoints currently running
 	Endpoints []Endpoint `json:"endpoints,omitempty"`
-	// StickySessionAffinitySession contains the StickyConfig object with stickness configuration
+	// StickySessionAffinitySession contains the StickyConfig object with stickyness configuration
 	SessionAffinity SessionAffinityConfig `json:"sessionAffinityConfig"`
 	// Consistent hashing by NGINX variable
 	UpstreamHashBy string `json:"upstream-hash-by,omitempty"`
@@ -265,6 +265,9 @@ type Location struct {
 	// Logs allows to enable or disable the nginx logs
 	// By default this is enabled
 	Logs log.Config `json:"logs,omitempty"`
+	// GRPC indicates if the kubernetes service exposes a gRPC interface
+	// By default this is false
+	GRPC bool `json:"grpc"`
 }
 
 // SSLPassthroughBackend describes a SSL upstream server configured
