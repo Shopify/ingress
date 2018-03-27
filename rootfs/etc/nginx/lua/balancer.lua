@@ -44,7 +44,7 @@ local function balance()
   if is_sticky then
     local upstream = sticky.get_upstream(backend)
     if upstream ~= nil then
-      return upstream[1], upstream[2]
+      return upstream["host"], upstream["port"]
     end
     lb_alg = DEFAULT_LB_ALG
   end

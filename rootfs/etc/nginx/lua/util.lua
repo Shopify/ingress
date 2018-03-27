@@ -39,8 +39,10 @@ function _M.split_upstream_var(var)
     return nil, nil
   end
   local t = {}
-  for v in var:gmatch("[^:]+") do
-    t[#t+1] = v 
+  for v in var:gmatch("[^%s|,]+") do
+    if v ~= ":" then
+      t[#t+1] = v
+    end
   end
   return t
 end
@@ -49,6 +51,16 @@ function _M.get_first_value(var)
   local t = _M.split_upstream_var(var) or {}
   if #t == 0 then return nil end
   return t[1]
+end
+
+-- splits strings into host and port
+function _M.parse_addr(addr)
+  local _, _, host, port = addr:find("([^:]+):([^:]+)")
+  if host and port then
+    return {host=host, port=port}
+  else
+    return nil
+  end
 end
 
 -- this implementation is taken from:

@@ -50,8 +50,8 @@ function _M.get_upstream(backend)
     return nil
   end
 
-  local upstream = util.split_upstream_var(upstream_string)
-  local valid = is_valid_upstream(backend, upstream[1], upstream[2])
+  local upstream = util.parse_addr(upstream_string)
+  local valid = is_valid_upstream(backend, upstream["host"], upstream["port"])
   if not valid then
     return nil
   end
@@ -72,7 +72,7 @@ function _M.set_upstream(endpoint, backend)
     end
     encrypted = cipher.to_hex(cipher.md5_digest(upstream, true))
   end
-  
+
   ngx.header["Set-Cookie"] = cookie_name .. "=" .. encrypted .. ";"
 
   local upstream = endpoint.address .. ":" .. endpoint.port
