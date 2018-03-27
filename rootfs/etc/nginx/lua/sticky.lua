@@ -62,13 +62,17 @@ function _M.set_upstream(endpoint, backend)
   local cookie_name = get_cookie_name(backend)
   local upstream = endpoint.address .. ":" .. endpoint.port
   local encrypted
-
-  if backend["sessionAffinityConfig"]["cookieSessionAffinity"]["hash"] == "sha1" then
+  local hash = backend["sessionAffinityConfig"]["cookieSessionAffinity"]["hash"]
+  
+  if hash == "sha1" then
     encrypted = cipher.to_hex(cipher.sha1_digest(upstream, true))
   else
+    if hash ~= "md5" then
+      ngx.log(ngx.WARN, "nginx.ingress.kubernetes.io/session-cookie-hash not defined, defaulting to md5")
+    end
     encrypted = cipher.to_hex(cipher.md5_digest(upstream, true))
   end
-
+  
   ngx.header["Set-Cookie"] = cookie_name .. "=" .. encrypted .. ";"
 
   local upstream = endpoint.address .. ":" .. endpoint.port
