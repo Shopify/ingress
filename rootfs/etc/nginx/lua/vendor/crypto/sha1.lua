@@ -1,6 +1,6 @@
 -- Copyright (C) by Yichun Zhang (agentzh)
 
-local sha = require "crypto.sha"
+local sha = require "vendor.crypto.sha"
 local ffi = require "ffi"
 local ffi_new = ffi.new
 local ffi_str = ffi.string
