@@ -631,10 +631,8 @@ func (n *NGINXController) createUpstreams(data []*extensions.Ingress, du *ingres
 			if upstreams[defBackend].SessionAffinity.AffinityType == "" {
 				upstreams[defBackend].SessionAffinity.AffinityType = anns.SessionAffinity.Type
 			}
-			if upstreams[defBackend].SessionAffinity.CookieSessionAffinity.Name == "" {
+			if upstreams[defBackend].SessionAffinity.AffinityType == "cookie" {
 				upstreams[defBackend].SessionAffinity.CookieSessionAffinity.Name = anns.SessionAffinity.Cookie.Name
-			}
-			if upstreams[defBackend].SessionAffinity.CookieSessionAffinity.Hash == "" {
 				upstreams[defBackend].SessionAffinity.CookieSessionAffinity.Hash = anns.SessionAffinity.Cookie.Hash
 			}
 
@@ -700,11 +698,8 @@ func (n *NGINXController) createUpstreams(data []*extensions.Ingress, du *ingres
 					upstreams[name].SessionAffinity.AffinityType = anns.SessionAffinity.Type
 				}
 
-				if upstreams[name].SessionAffinity.CookieSessionAffinity.Name == "" {
+				if upstreams[name].SessionAffinity.AffinityType == "cookie" {
 					upstreams[name].SessionAffinity.CookieSessionAffinity.Name = anns.SessionAffinity.Cookie.Name
-				}
-
-				if upstreams[name].SessionAffinity.CookieSessionAffinity.Hash == "" {
 					upstreams[name].SessionAffinity.CookieSessionAffinity.Hash = anns.SessionAffinity.Cookie.Hash
 				}
 

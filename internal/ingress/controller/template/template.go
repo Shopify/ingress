@@ -579,7 +579,7 @@ func buildDenyVariable(a interface{}) string {
 }
 
 // TODO: Needs Unit Tests
-func buildUpstreamName(host string, b interface{}, loc interface{}) string {
+func buildUpstreamName(host string, b interface{}, loc interface{}, dynamicConfigurationEnabled bool) string {
 
 	backends, ok := b.([]*ingress.Backend)
 	if !ok {
@@ -595,14 +595,16 @@ func buildUpstreamName(host string, b interface{}, loc interface{}) string {
 
 	upstreamName := location.Backend
 
-	for _, backend := range backends {
-		if backend.Name == location.Backend {
-			if backend.SessionAffinity.AffinityType == "cookie" &&
-				isSticky(host, location, backend.SessionAffinity.CookieSessionAffinity.Locations) {
-				upstreamName = fmt.Sprintf("sticky-%v", upstreamName)
+	if !dynamicConfigurationEnabled{
+		for _, backend := range backends {
+			if backend.Name == location.Backend {
+				if backend.SessionAffinity.AffinityType == "cookie" &&
+					isSticky(host, location, backend.SessionAffinity.CookieSessionAffinity.Locations) {
+					upstreamName = fmt.Sprintf("sticky-%v", upstreamName)
+				}
+				
+				break
 			}
-
-			break
 		}
 	}
 
