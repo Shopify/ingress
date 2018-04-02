@@ -362,7 +362,11 @@
 [[projects]]
   branch = "master"
   name = "golang.org/x/crypto"
-  packages = ["ssh/terminal"]
+  packages = [
+    "ed25519",
+    "ed25519/internal/edwards25519",
+    "ssh/terminal"
+  ]
   revision = "6a293f2d4b14b8e6d3f0539e383f6d0d30fce3fd"
 
 [[projects]]
@@ -508,6 +512,17 @@
   packages = ["."]
   revision = "3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4"
   version = "v0.9.0"
+
+[[projects]]
+  name = "gopkg.in/square/go-jose.v2"
+  packages = [
+    ".",
+    "cipher",
+    "json",
+    "jwt"
+  ]
+  revision = "76dd09796242edb5b897103a75df2645c028c960"
+  version = "v2.1.6"
 
 [[projects]]
   branch = "v2"
@@ -829,14 +844,14 @@
     "pkg/controller",
     "pkg/features",
     "pkg/fieldpath",
-    "pkg/kubelet/apis",
-    "pkg/kubelet/apis/cri/v1alpha1/runtime",
+    "pkg/kubelet/apis/cri/runtime/v1alpha2",
     "pkg/kubelet/container",
     "pkg/kubelet/types",
     "pkg/kubelet/util/format",
     "pkg/kubelet/util/ioutils",
     "pkg/kubelet/util/sliceutils",
     "pkg/master/ports",
+    "pkg/scheduler/api",
     "pkg/security/apparmor",
     "pkg/serviceaccount",
     "pkg/util/file",
@@ -851,7 +866,8 @@
     "pkg/util/sysctl",
     "pkg/util/taints",
     "pkg/volume",
-    "pkg/volume/util",
+    "pkg/volume/util/fs",
+    "pkg/volume/util/recyclerclient",
     "third_party/forked/golang/expansion"
   ]
   revision = "master"
