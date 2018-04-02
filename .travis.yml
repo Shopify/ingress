@@ -36,6 +36,7 @@ env:
 jobs:
   include:
   - stage: Static Check
+    if: type = api
     script:
     - sudo luarocks install luacheck
     - make luacheck
@@ -43,6 +44,7 @@ jobs:
     - go get -u github.com/jteeuwen/go-bindata/...
     - make verify-all
   - stage: Coverage
+    if: type = api
     before_script:
     # start minikube 
     - test/e2e/up.sh
@@ -50,6 +52,7 @@ jobs:
     - if ! go get github.com/jteeuwen/go-bindata/...; then github.com/jteeuwen/go-bindata/...;fi
     - make cover
   - stage: e2e
+    if: type = api
     before_script:
     - if ! go get github.com/jteeuwen/go-bindata/...; then github.com/jteeuwen/go-bindata/...;fi
     - make e2e-image
