@@ -578,7 +578,6 @@ func buildDenyVariable(a interface{}) string {
 	return fmt.Sprintf("$deny_%v", denyPathSlugMap[l])
 }
 
-// TODO: Needs Unit Tests
 func buildUpstreamName(host string, b interface{}, loc interface{}, dynamicConfigurationEnabled bool) string {
 
 	backends, ok := b.([]*ingress.Backend)
