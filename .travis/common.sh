@@ -40,51 +40,21 @@ if ! [ -x "$(command -v jq)" ]; then
   sudo apt-get install -y jq
 fi
 
-if [ "$TRAVIS_REPO_SLUG" != "kubernetes/ingress-nginx" ];
+if [ "$TRAVIS_REPO_SLUG" != "Shopify/ingress" ];
 then
-  echo "Only builds from kubernetes/ingress-nginx repository is allowed.";
+  echo "Only builds from Shopify/ingress repository is allowed.";
   exit 0;
 fi
 
-SKIP_MESSAGE="Publication of docker image to quay.io registry skipped."
-
-if [ "$TRAVIS_EVENT_TYPE" != "api" ];
+# variables DOCKER_USERNAME and DOCKER_PASSWORD are required to push docker images
+if [ "$DOCKER_USERNAME" == "" ];
 then
-  echo "Only builds triggered from travis-ci API is allowed. $SKIP_MESSAGE";
+  echo "Environment variable DOCKER_USERNAME is missing.";
   exit 0;
 fi
 
-if [ "$TRAVIS_PULL_REQUEST" != "false" ];
+if [ "$DOCKER_PASSWORD" == "" ];
 then
-  echo "This is a pull request. $SKIP_MESSAGE";
+  echo "Environment variable DOCKER_PASSWORD is missing.";
   exit 0;
 fi
-
-if [ "$TRAVIS_PULL_REQUEST_BRANCH" != "" ];
-then
-  echo "Only images build from master branch are allowed. $SKIP_MESSAGE";
-  exit 0;
-fi
-
-# variables QUAY_USERNAME and QUAY_PASSWORD are required to push docker images
-if [ "$QUAY_USERNAME" == "" ];
-then
-  echo "Environment variable QUAY_USERNAME is missing.";
-  exit 0;
-fi
-
-if [ "$QUAY_PASSWORD" == "" ];
-then
-  echo "Environment variable QUAY_PASSWORD is missing.";
-  exit 0;
-fi
-
-function docker_tag_exists() {
-    TAG=${2//\"/}
-    IMAGES=$(curl -s -H "Authorization: Bearer ${QUAY_PASSWORD}" https://quay.io/api/v1/repository/$1-$3/image/ | jq '.images | sort_by(.sort_index) | .[] .tags | select(.[] !=null) | .[0]' | sed s/\"//g)
-    if echo "$IMAGES" | grep -q -P "(^|\s)$TAG(?=\s|$)" ; then
-        return 0
-    fi
-
-    return 1
-}
