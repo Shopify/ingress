@@ -39,6 +39,8 @@ import (
 var _ = framework.IngressNginxDescribe("Dynamic Configuration", func() {
 	f := framework.NewDefaultFramework("dynamic-configuration")
 
+	var defaultNginxConfigMapData map[string]string = nil
+
 	BeforeEach(func() {
 		err := enableDynamicConfiguration(f.KubeClientSet)
 		Expect(err).NotTo(HaveOccurred())
@@ -68,10 +70,19 @@ var _ = framework.IngressNginxDescribe("Dynamic Configuration", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(log).ToNot(ContainSubstring("could not dynamically reconfigure"))
 		Expect(log).To(ContainSubstring("first sync of Nginx configuration"))
+
+		if defaultNginxConfigMapData == nil {
+			defaultNginxConfigMapData, err = f.GetNginxConfigMapData()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(defaultNginxConfigMapData).NotTo(BeNil())
+		}
 	})
 
 	AfterEach(func() {
 		err := disableDynamicConfiguration(f.KubeClientSet)
+		Expect(err).NotTo(HaveOccurred())
+
+		err = f.SetNginxConfigMapData(defaultNginxConfigMapData)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -109,6 +120,40 @@ var _ = framework.IngressNginxDescribe("Dynamic Configuration", func() {
 			Expect(restOfLogs).ToNot(ContainSubstring("ingress backend successfully reloaded"))
 			Expect(restOfLogs).To(ContainSubstring("skipping reload"))
 			Expect(restOfLogs).ToNot(ContainSubstring("first sync of Nginx configuration"))
+		})
+
+		It("configuration module should read from temp file when request body > client_body_buffer_size", func() {
+			resp, _, errs := gorequest.New().
+				Get(fmt.Sprintf("%s?id=endpoints_only_changes", f.NginxHTTPURL)).
+				Set("Host", "foo.com").
+				End()
+			Expect(len(errs)).Should(BeNumerically("==", 0))
+			Expect(resp.StatusCode).Should(Equal(http.StatusOK))
+
+			// Update client-body-buffer-size to 1 byte
+			err := f.UpdateNginxConfigMapData("client-body-buffer-size", "8")
+			Expect(err).NotTo(HaveOccurred())
+
+			replicas := 2
+			err = framework.UpdateDeployment(f.KubeClientSet, f.Namespace.Name, "http-svc", replicas,
+				func(deployment *appsv1beta1.Deployment) error {
+					deployment.Spec.Replicas = framework.NewInt32(int32(replicas))
+					_, err := f.KubeClientSet.AppsV1beta1().Deployments(f.Namespace.Name).Update(deployment)
+					return err
+				})
+			Expect(err).NotTo(HaveOccurred())
+
+			time.Sleep(5 * time.Second)
+			log, err := f.NginxLogs()
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(log).ToNot(BeEmpty())
+			index := strings.Index(log, "id=endpoints_only_changes")
+			restOfLogs := log[index:]
+
+			By("POSTing new backends to Lua endpoint")
+			Expect(restOfLogs).To(ContainSubstring("a client request body is buffered to a temporary file"))
+			Expect(restOfLogs).ToNot(ContainSubstring("POST carries empty response body"))
 		})
 
 		It("should handle annotation changes", func() {
