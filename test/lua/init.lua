@@ -18,7 +18,9 @@ package.cpath = "/usr/lib/lua/5.2/?.so;" .. "./test/lua/lib/_" .. os .."/?.so;" 
 
 lunity = require("lunity")
 ngx = require("ngx_mock")
+
 expected = {
   ngx_balancer = {}
 }
+
 ngx.reset()

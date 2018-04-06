@@ -7,13 +7,15 @@ module("balancer_tests", lunity)
 
 local balancer = require("balancer")
 
+fake_upstreams = {}
+
 function setup()
   ngx.reset()
 end
 
 function test_call_phase_log()
   ngx.phase = "log"
-  ngx.var.proxy_upstream_name = "fake_upstream"
+  ngx.var.proxy_upstream_name = "round_robin_upstream"
   assertDoesNotError(balancer.call)
 end
 
@@ -24,7 +26,7 @@ end
 
 function test_call_phase_balancer()
   ngx.phase = "balancer"
-  ngx.var.proxy_upstream_name = "fake_upstream"
+  ngx.var.proxy_upstream_name = "round_robin_upstream"
 
   balancer.call()
 
