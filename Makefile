@@ -151,6 +151,12 @@ verify-all:
 test:
 	@go test -v -race -tags "$(BUILDTAGS) cgo" $(shell go list ${PKG}/... | grep -v vendor | grep -v '/test/e2e')
 
+.PHONY: lua-test
+lua-test:
+	@for file in ./test/lua/unit/**; do \
+		luajit $$file; \
+	done
+
 .PHONY: e2e-image
 e2e-image: sub-container-amd64
 	TAG=$(TAG) IMAGE=$(MULTI_ARCH_IMG) docker tag $(IMAGE):$(TAG) $(IMAGE):test
