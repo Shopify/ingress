@@ -315,38 +315,6 @@ func ensureIngress(f *framework.Framework, host string) (*extensions.Ingress, er
 	})
 }
 
-func ensureStickyIngress(f *framework.Framework, host string) (*extensions.Ingress, error) {
-	return f.EnsureIngress(&v1beta1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      host,
-			Namespace: f.Namespace.Name,
-			Annotations: map[string]string{
-				"nginx.ingress.kubernetes.io/affinity": "cookie",
-			},
-		},
-		Spec: v1beta1.IngressSpec{
-			Rules: []v1beta1.IngressRule{
-				{
-					Host: host,
-					IngressRuleValue: v1beta1.IngressRuleValue{
-						HTTP: &v1beta1.HTTPIngressRuleValue{
-							Paths: []v1beta1.HTTPIngressPath{
-								{
-									Path: "/",
-									Backend: v1beta1.IngressBackend{
-										ServiceName: "http-svc",
-										ServicePort: intstr.FromInt(80),
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-}
-
 func updateConfigmap(k, v string, c kubernetes.Interface) {
 	By(fmt.Sprintf("updating configuration configmap setting %v to '%v'", k, v))
 	config, err := c.CoreV1().ConfigMaps("ingress-nginx").Get("nginx-configuration", metav1.GetOptions{})
