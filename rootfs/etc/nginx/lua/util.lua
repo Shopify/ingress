@@ -53,6 +53,16 @@ function _M.get_first_value(var)
   return t[1]
 end
 
+-- splits strings into host and port
+function _M.parse_addr(addr)
+  local _, _, host, port = addr:find("([^:]+):([^:]+)")
+  if host and port then
+    return {host=host, port=port}
+  else
+    return nil
+  end
+end
+
 -- this implementation is taken from:
 -- https://github.com/luafun/luafun/blob/master/fun.lua#L33
 -- SHA: 04c99f9c393e54a604adde4b25b794f48104e0d0

@@ -5,6 +5,7 @@ local util = require("util")
 local lrucache = require("resty.lrucache")
 local resty_lock = require("resty.lock")
 local ewma = require("balancer.ewma")
+local sticky = require("sticky")
 
 -- measured in seconds
 -- for an Nginx worker to pick up the new list of upstream peers
@@ -48,6 +49,15 @@ end
 local function balance()
   local backend = get_current_backend()
   local lb_alg = get_current_lb_alg()
+  local is_sticky = sticky.is_sticky(backend)
+
+  if is_sticky then
+    local upstream = sticky.get_upstream(backend)
+    if upstream ~= nil then
+      return upstream["host"], upstream["port"]
+    end
+    lb_alg = DEFAULT_LB_ALG
+  end
 
   if lb_alg == "ip_hash" then
     -- TODO(elvinefendi) implement me
@@ -76,6 +86,9 @@ local function balance()
   end
   if forcible then
     ngx.log(ngx.WARN, "round_robin_state:set valid items forcibly overwritten")
+  end
+  if is_sticky then
+    sticky.set_upstream(endpoint, backend)
   end
   round_robin_lock:unlock(backend.name .. ROUND_ROBIN_LOCK_KEY)
 
@@ -155,10 +168,12 @@ function _M.call()
   local ok
   ok, err = ngx_balancer.set_current_peer(host, port)
   if ok then
-    ngx.log(
-      ngx.INFO,
-      "current peer is set to " .. host .. ":" .. port .. " using lb_alg " .. tostring(get_current_lb_alg())
-    )
+    local algorithm = get_current_lb_alg()
+    if sticky.is_sticky(get_current_backend()) then
+      algorithm = "round robin with session affinity"
+    end
+    local message = string.format("current peer is set to %s:%s using lb_alg %s", host, port, algorithm)
+    ngx.log(ngx.INFO,  message)
   else
     ngx.log(ngx.ERR, "error while setting current upstream peer to: " .. tostring(err))
   end
