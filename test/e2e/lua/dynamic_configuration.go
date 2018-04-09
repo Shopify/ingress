@@ -184,6 +184,68 @@ var _ = framework.IngressNginxDescribe("Dynamic Configuration", func() {
 			})
 		Expect(err).ToNot(HaveOccurred())
 	})
+
+	Context("when session affinity annotation is present", func() {
+		It("should use sticky sessions when ingress rules are configured", func() {
+			updateConfigmap("error-log-level", "info", f.KubeClientSet)
+
+			ingress, err := f.KubeClientSet.ExtensionsV1beta1().Ingresses(f.Namespace.Name).Get("foo.com", metav1.GetOptions{})
+			Expect(err).ToNot(HaveOccurred())
+	
+			ingress.ObjectMeta.Annotations = map[string]string{
+				"nginx.ingress.kubernetes.io/affinity": "cookie",
+			}
+			_, err = f.KubeClientSet.ExtensionsV1beta1().Ingresses(f.Namespace.Name).Update(ingress)
+			Expect(err).ToNot(HaveOccurred())
+			time.Sleep(5 * time.Second)
+
+			host := "foo.com"
+			resp, _, errs := gorequest.New().
+				Get(f.NginxHTTPURL).
+				Set("Host", host).
+				End()
+			Expect(len(errs)).Should(BeNumerically("==", 0))
+			Expect(resp.StatusCode).Should(Equal(http.StatusOK))
+
+			log, err := f.NginxLogs()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(log).ToNot(BeEmpty())
+			Expect(log).To(ContainSubstring("using lb_alg round robin with session affinity"))
+		})
+
+		It("should use sticky sessions when a default backend and no ingress rules configured", func() {
+			updateConfigmap("error-log-level", "info", f.KubeClientSet)
+
+			ingress, err := f.KubeClientSet.ExtensionsV1beta1().Ingresses(f.Namespace.Name).Get("foo.com", metav1.GetOptions{})
+			Expect(err).ToNot(HaveOccurred())
+
+			ingress.Spec = v1beta1.IngressSpec{
+					Backend: &v1beta1.IngressBackend{
+						ServiceName: "http-svc",
+						ServicePort: intstr.FromInt(80),
+				},
+			}
+			ingress.ObjectMeta.Annotations = map[string]string{
+				"nginx.ingress.kubernetes.io/affinity": "cookie",
+			}
+			_, err = f.KubeClientSet.ExtensionsV1beta1().Ingresses(f.Namespace.Name).Update(ingress)
+			Expect(err).ToNot(HaveOccurred())
+			time.Sleep(5 * time.Second)
+
+			host := "foo.com"
+			resp, _, errs := gorequest.New().
+				Get(f.NginxHTTPURL).
+				Set("Host", host).
+				End()
+			Expect(len(errs)).Should(BeNumerically("==", 0))
+			Expect(resp.StatusCode).Should(Equal(http.StatusOK))
+
+			log, err := f.NginxLogs()
+			Expect(err).ToNot(HaveOccurred())
+			Expect(log).ToNot(BeEmpty())
+			Expect(log).To(ContainSubstring("using lb_alg round robin with session affinity"))
+		})
+	})
 })
 
 func enableDynamicConfiguration(kubeClientSet kubernetes.Interface) error {
@@ -251,4 +313,52 @@ func ensureIngress(f *framework.Framework, host string) (*extensions.Ingress, er
 			},
 		},
 	})
+}
+
+func ensureStickyIngress(f *framework.Framework, host string) (*extensions.Ingress, error) {
+	return f.EnsureIngress(&v1beta1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      host,
+			Namespace: f.Namespace.Name,
+			Annotations: map[string]string{
+				"nginx.ingress.kubernetes.io/affinity": "cookie",
+			},
+		},
+		Spec: v1beta1.IngressSpec{
+			Rules: []v1beta1.IngressRule{
+				{
+					Host: host,
+					IngressRuleValue: v1beta1.IngressRuleValue{
+						HTTP: &v1beta1.HTTPIngressRuleValue{
+							Paths: []v1beta1.HTTPIngressPath{
+								{
+									Path: "/",
+									Backend: v1beta1.IngressBackend{
+										ServiceName: "http-svc",
+										ServicePort: intstr.FromInt(80),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func updateConfigmap(k, v string, c kubernetes.Interface) {
+	By(fmt.Sprintf("updating configuration configmap setting %v to '%v'", k, v))
+	config, err := c.CoreV1().ConfigMaps("ingress-nginx").Get("nginx-configuration", metav1.GetOptions{})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(config).NotTo(BeNil())
+
+	if config.Data == nil {
+		config.Data = map[string]string{}
+	}
+
+	config.Data[k] = v
+	_, err = c.CoreV1().ConfigMaps("ingress-nginx").Update(config)
+	Expect(err).NotTo(HaveOccurred())
+	time.Sleep(1 * time.Second)
 }
