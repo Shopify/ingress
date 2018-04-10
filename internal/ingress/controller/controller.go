@@ -697,15 +697,6 @@ func (n *NGINXController) createUpstreams(data []*extensions.Ingress, du *ingres
 					upstreams[name].LoadBalancing = anns.LoadBalancing
 				}
 
-				if upstreams[name].SessionAffinity.AffinityType == "" {
-					upstreams[name].SessionAffinity.AffinityType = anns.SessionAffinity.Type
-				}
-
-				if upstreams[name].SessionAffinity.AffinityType == "cookie" {
-					upstreams[name].SessionAffinity.CookieSessionAffinity.Name = anns.SessionAffinity.Cookie.Name
-					upstreams[name].SessionAffinity.CookieSessionAffinity.Hash = anns.SessionAffinity.Cookie.Hash
-				}
-
 				svcKey := fmt.Sprintf("%v/%v", ing.GetNamespace(), path.Backend.ServiceName)
 
 				// Add the service cluster endpoint as the upstream instead of individual endpoints
