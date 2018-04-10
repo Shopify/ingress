@@ -1,6 +1,8 @@
 local cipher = require("cipher")
 local util = require("util")
-local string = require("vendor.crypto.string")
+local string = require("resty.string")
+local sha1_crypto = require("resty.sha1")
+local md5_crypto = require("resty.md5")
 
 local sticky_sessions = ngx.shared.sticky_sessions
 
@@ -9,6 +11,34 @@ local DEFAULT_SESSION_COOKIE_NAME = "route"
 local STICKY_TIMEOUT = 0
 
 local _M = {}
+
+local sha1 = sha1_crypto:new()
+if not sha1 then
+  ngx.say("failed to create the sha1 object")
+  return
+end
+
+local md5 = md5_crypto:new()
+if not md5 then
+  ngx.say("failed to create the md5 object")
+  return
+end
+
+local function md5_digest(raw, eof)
+  md5:update(raw)
+  if eof then
+    return md5:final()
+  end
+  return nil
+end
+
+local function sha1_digest(raw, eof)
+  sha1:update(raw)
+  if eof then
+      return sha1:final()
+  end
+  return nil
+end
 
 local function get_cookie_name(backend)
   local name = backend["sessionAffinityConfig"]["cookieSessionAffinity"]["name"]
@@ -66,12 +96,12 @@ function _M.set_upstream(endpoint, backend)
   local hash = backend["sessionAffinityConfig"]["cookieSessionAffinity"]["hash"]
 
   if hash == "sha1" then
-    encrypted = string.to_hex(cipher.sha1_digest(upstream, true))
+    encrypted = string.to_hex(sha1_digest(upstream, true))
   else
     if hash ~= "md5" then
       ngx.log(ngx.WARN, "nginx.ingress.kubernetes.io/session-cookie-hash not defined, defaulting to md5")
     end
-    encrypted = string.to_hex(cipher.md5_digest(upstream, true))
+    encrypted = string.to_hex(md5_digest(upstream, true))
   end
 
   ngx.header["Set-Cookie"] = cookie_name .. "=" .. encrypted .. ";"

@@ -56,7 +56,7 @@ local function balance()
     if upstream ~= nil then
       return upstream["host"], upstream["port"]
     end
-    lb_alg = DEFAULT_LB_ALG
+    lb_alg = "round_robin"
   end
 
   if lb_alg == "ip_hash" then
