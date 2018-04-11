@@ -52,9 +52,9 @@ local function balance()
   local is_sticky = sticky.is_sticky(backend)
 
   if is_sticky then
-    local upstream = sticky.get_upstream(backend)
-    if upstream ~= nil then
-      return upstream["host"], upstream["port"]
+    local endpoint = sticky.get_upstream(backend)
+    if endpoint ~= nil then
+      return endpoint.address, endpoint.port
     end
     lb_alg = "round_robin"
   end
@@ -168,12 +168,10 @@ function _M.call()
   local ok
   ok, err = ngx_balancer.set_current_peer(host, port)
   if ok then
-    local algorithm = get_current_lb_alg()
-    if sticky.is_sticky(get_current_backend()) then
-      algorithm = "round robin with session affinity"
-    end
-    local message = string.format("current peer is set to %s:%s using lb_alg %s", host, port, algorithm)
-    ngx.log(ngx.INFO,  message)
+    ngx.log(
+      ngx.INFO,
+      "current peer is set to " .. host .. ":" .. port .. " using lb_alg " .. tostring(get_current_lb_alg())
+    )
   else
     ngx.log(ngx.ERR, "error while setting current upstream peer to: " .. tostring(err))
   end
