@@ -19,9 +19,9 @@ package lua
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
-	"regexp"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -194,7 +194,7 @@ var _ = framework.IngressNginxDescribe("Dynamic Configuration", func() {
 			ingress, err := f.KubeClientSet.ExtensionsV1beta1().Ingresses(f.Namespace.Name).Get("foo.com", metav1.GetOptions{})
 			Expect(err).ToNot(HaveOccurred())
 			ingress.ObjectMeta.Annotations = map[string]string{
-				"nginx.ingress.kubernetes.io/affinity": "cookie",
+				"nginx.ingress.kubernetes.io/affinity":            "cookie",
 				"nginx.ingress.kubernetes.io/session-cookie-name": cookieName,
 			}
 			_, err = f.KubeClientSet.ExtensionsV1beta1().Ingresses(f.Namespace.Name).Update(ingress)
@@ -228,7 +228,7 @@ var _ = framework.IngressNginxDescribe("Dynamic Configuration", func() {
 				Get(f.NginxHTTPURL).
 				Set("Host", host).
 				End()
-				
+
 			Expect(len(errs)).Should(BeNumerically("==", 0))
 			Expect(resp.StatusCode).Should(Equal(http.StatusOK))
 
@@ -251,9 +251,9 @@ var _ = framework.IngressNginxDescribe("Dynamic Configuration", func() {
 			ingress, err := f.KubeClientSet.ExtensionsV1beta1().Ingresses(f.Namespace.Name).Get("foo.com", metav1.GetOptions{})
 			Expect(err).ToNot(HaveOccurred())
 			ingress.Spec = v1beta1.IngressSpec{
-					Backend: &v1beta1.IngressBackend{
-						ServiceName: "http-svc",
-						ServicePort: intstr.FromInt(80),
+				Backend: &v1beta1.IngressBackend{
+					ServiceName: "http-svc",
+					ServicePort: intstr.FromInt(80),
 				},
 			}
 			ingress.ObjectMeta.Annotations = map[string]string{
