@@ -15,20 +15,28 @@ local _M = {}
 local function md5_digest(raw)
   local md5 = md5_crypto:new()
   if not md5 then
-    ngx.say("failed to create the md5 object")
+    ngx.say("md5: failed to create object")
     return
   end
-  md5:update(raw)
+  local ok = md5:update(raw)
+  if not ok then
+    ngx.say("md5: failed to add data")
+    return
+  end
   return str.to_hex(md5:final())
 end
 
 local function sha1_digest(raw)
   local sha1 = sha1_crypto:new()
   if not sha1 then
-    ngx.say("failed to create the sha1 object")
+    ngx.say("sha1: failed to create object")
     return
   end
-  sha1:update(raw)
+  local ok = sha1:update(raw)
+  if not ok then
+    ngx.say("sha1: failed to add data")
+    return
+  end
   return str.to_hex(sha1:final())
 end
 
