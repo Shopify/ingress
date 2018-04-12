@@ -12,24 +12,22 @@ local STICKY_TIMEOUT = 0
 
 local _M = {}
 
-local sha1 = sha1_crypto:new()
-if not sha1 then
-  ngx.say("failed to create the sha1 object")
-  return
-end
-
-local md5 = md5_crypto:new()
-if not md5 then
-  ngx.say("failed to create the md5 object")
-  return
-end
-
 local function md5_digest(raw)
+  local md5 = md5_crypto:new()
+  if not md5 then
+    ngx.say("failed to create the md5 object")
+    return
+  end
   md5:update(raw)
   return str.to_hex(md5:final())
 end
 
 local function sha1_digest(raw)
+  local sha1 = sha1_crypto:new()
+  if not sha1 then
+    ngx.say("failed to create the sha1 object")
+    return
+  end
   sha1:update(raw)
   return str.to_hex(sha1:final())
 end
@@ -39,7 +37,7 @@ local function get_cookie_name(backend)
   return name or DEFAULT_SESSION_COOKIE_NAME
 end
 
-local function is_valid_(backend, address, port)
+local function is_valid_endpoint(backend, address, port)
   for _, ep in ipairs(backend.endpoints) do
     if ep.address == address and ep.port == port then
       return true
