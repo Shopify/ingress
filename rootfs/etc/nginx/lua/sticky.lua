@@ -15,29 +15,33 @@ local _M = {}
 local function md5_digest(raw)
   local md5 = md5_crypto:new()
   if not md5 then
-    ngx.say("md5: failed to create object")
-    return
+    return nil, "md5: failed to create object"
   end
   local ok = md5:update(raw)
   if not ok then
-    ngx.say("md5: failed to add data")
-    return
+    return nil, "md5: failed to add data"
   end
-  return str.to_hex(md5:final())
+  local digest = md5:final()
+  if digest == nil then
+    return nil, "md5: failed to create digest"
+  end
+  return str.to_hex(digest), nil
 end
 
 local function sha1_digest(raw)
   local sha1 = sha1_crypto:new()
   if not sha1 then
-    ngx.say("sha1: failed to create object")
-    return
+    return nil, "sha1: failed to create object"
   end
   local ok = sha1:update(raw)
   if not ok then
-    ngx.say("sha1: failed to add data")
-    return
+    return nil, "sha1: failed to add data"
   end
-  return str.to_hex(sha1:final())
+  local digest = sha1:final()
+  if digest == nil then
+    return nil, "sha1: failed to create digest"
+  end
+  return str.to_hex(digest), nil
 end
 
 local function get_cookie_name(backend)
@@ -89,12 +93,12 @@ end
 
 function _M.set_endpoint(endpoint, backend)
   local cookie_name = get_cookie_name(backend)
-  local encrypted
+  local encrypted, err
   local endpoint_string = json.encode(endpoint)
   local hash = backend["sessionAffinityConfig"]["cookieSessionAffinity"]["hash"]
 
   if hash == "sha1" then
-    encrypted = sha1_digest(endpoint_string)
+    encrypted, err = sha1_digest(endpoint_string)
   else
     if hash ~= DEFAULT_SESSION_COOKIE_HASH then
       ngx.log(ngx.WARN, string.format(
@@ -104,13 +108,16 @@ function _M.set_endpoint(endpoint, backend)
         DEFAULT_SESSION_COOKIE_HASH
       ))
     end
-    encrypted = md5_digest(endpoint_string)
+    encrypted, err = md5_digest(endpoint_string)
+  end
+  if err ~= nil then
+    ngx.log(ngx.WARN, string.format("[backend=%s, affinity=cookie] failed to assign endpoint: %s", backend.name, err))
+    return
   end
 
-  ngx.header["Set-Cookie"] = cookie_name .. "=" .. encrypted .. ";"
-
   ngx.log(ngx.INFO, string.format("[backend=%s, affinity=cookie] assigning a new endpoint", backend.name))
-  local success, err, forcible
+  ngx.header["Set-Cookie"] = cookie_name .. "=" .. encrypted .. ";"
+  local success, forcible
   success, err, forcible = sticky_sessions:set(encrypted, endpoint_string, STICKY_TIMEOUT)
   if not success then
     ngx.log(ngx.WARN, string.format("[backend=%s, affinity=cookie] failed to assign endpoint: %s", backend.name, err))
