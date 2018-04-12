@@ -52,7 +52,7 @@ local function balance()
   local is_sticky = sticky.is_sticky(backend)
 
   if is_sticky then
-    local endpoint = sticky.get_upstream(backend)
+    local endpoint = sticky.get_endpoint(backend)
     if endpoint ~= nil then
       return endpoint.address, endpoint.port
     end
@@ -88,7 +88,7 @@ local function balance()
     ngx.log(ngx.WARN, "round_robin_state:set valid items forcibly overwritten")
   end
   if is_sticky then
-    sticky.set_upstream(endpoint, backend)
+    sticky.set_endpoint(endpoint, backend)
   end
   round_robin_lock:unlock(backend.name .. ROUND_ROBIN_LOCK_KEY)
 
