@@ -273,10 +273,10 @@ func New(checkOCSP bool,
 
 			store.extractAnnotations(addIng)
 			recorder.Eventf(addIng, apiv1.EventTypeNormal, "CREATE", fmt.Sprintf("Ingress %s/%s", addIng.Namespace, addIng.Name))
-			updateCh.In() <- Event{
+			writeToRingChannelWithLog(updateCh, Event{
 				Type: CreateEvent,
 				Obj:  obj,
-			}
+			})
 		},
 		DeleteFunc: func(obj interface{}) {
 			delIng, ok := obj.(*extensions.Ingress)
@@ -299,10 +299,10 @@ func New(checkOCSP bool,
 			}
 			recorder.Eventf(delIng, apiv1.EventTypeNormal, "DELETE", fmt.Sprintf("Ingress %s/%s", delIng.Namespace, delIng.Name))
 			store.listers.IngressAnnotation.Delete(delIng)
-			updateCh.In() <- Event{
+			writeToRingChannelWithLog(updateCh, Event{
 				Type: DeleteEvent,
 				Obj:  obj,
-			}
+			})
 		},
 		UpdateFunc: func(old, cur interface{}) {
 			oldIng := old.(*extensions.Ingress)
@@ -320,10 +320,10 @@ func New(checkOCSP bool,
 			}
 
 			store.extractAnnotations(curIng)
-			updateCh.In() <- Event{
+			writeToRingChannelWithLog(updateCh, Event{
 				Type: UpdateEvent,
 				Obj:  cur,
-			}
+			})
 		},
 	}
 
@@ -339,10 +339,10 @@ func New(checkOCSP bool,
 					_, err := store.GetLocalSecret(k8s.MetaNamespaceKey(sec))
 					if err == nil {
 						store.syncSecret(key)
-						updateCh.In() <- Event{
+						writeToRingChannelWithLog(updateCh, Event{
 							Type: UpdateEvent,
 							Obj:  cur,
-						}
+						})
 					}
 
 					for _, name := range set.List() {
@@ -352,10 +352,10 @@ func New(checkOCSP bool,
 						}
 					}
 
-					updateCh.In() <- Event{
+					writeToRingChannelWithLog(updateCh, Event{
 						Type: ConfigurationEvent,
 						Obj:  cur,
-					}
+					})
 				}
 			}
 		},
@@ -375,10 +375,10 @@ func New(checkOCSP bool,
 				}
 			}
 			store.sslStore.Delete(k8s.MetaNamespaceKey(sec))
-			updateCh.In() <- Event{
+			writeToRingChannelWithLog(updateCh, Event{
 				Type: DeleteEvent,
 				Obj:  obj,
-			}
+			})
 
 			// parse the ingress annotations (again)c
 			key := fmt.Sprintf("%v/%v", sec.Namespace, sec.Name)
@@ -391,35 +391,35 @@ func New(checkOCSP bool,
 					}
 				}
 
-				updateCh.In() <- Event{
+				writeToRingChannelWithLog(updateCh, Event{
 					Type: ConfigurationEvent,
 					Obj:  sec,
-				}
+				})
 			}
 		},
 	}
 
 	epEventHandler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
-			updateCh.In() <- Event{
+			writeToRingChannelWithLog(updateCh, Event{
 				Type: CreateEvent,
 				Obj:  obj,
-			}
+			})
 		},
 		DeleteFunc: func(obj interface{}) {
-			updateCh.In() <- Event{
+			writeToRingChannelWithLog(updateCh, Event{
 				Type: DeleteEvent,
 				Obj:  obj,
-			}
+			})
 		},
 		UpdateFunc: func(old, cur interface{}) {
 			oep := old.(*apiv1.Endpoints)
 			ocur := cur.(*apiv1.Endpoints)
 			if !reflect.DeepEqual(ocur.Subsets, oep.Subsets) {
-				updateCh.In() <- Event{
+				writeToRingChannelWithLog(updateCh, Event{
 					Type: UpdateEvent,
 					Obj:  cur,
-				}
+				})
 			}
 		},
 	}
@@ -431,10 +431,10 @@ func New(checkOCSP bool,
 			if mapKey == configmap {
 				glog.V(2).Infof("adding configmap %v to backend", mapKey)
 				store.setConfig(m)
-				updateCh.In() <- Event{
+				writeToRingChannelWithLog(updateCh, Event{
 					Type: ConfigurationEvent,
 					Obj:  obj,
-				}
+				})
 			}
 		},
 		UpdateFunc: func(old, cur interface{}) {
@@ -444,18 +444,18 @@ func New(checkOCSP bool,
 				if mapKey == configmap {
 					recorder.Eventf(m, apiv1.EventTypeNormal, "UPDATE", fmt.Sprintf("ConfigMap %v", mapKey))
 					store.setConfig(m)
-					updateCh.In() <- Event{
+					writeToRingChannelWithLog(updateCh, Event{
 						Type: ConfigurationEvent,
 						Obj:  cur,
-					}
+					})
 				}
 				// updates to configuration configmaps can trigger an update
 				if mapKey == tcp || mapKey == udp {
 					recorder.Eventf(m, apiv1.EventTypeNormal, "UPDATE", fmt.Sprintf("ConfigMap %v", mapKey))
-					updateCh.In() <- Event{
+					writeToRingChannelWithLog(updateCh, Event{
 						Type: ConfigurationEvent,
 						Obj:  cur,
-					}
+					})
 				}
 			}
 		},
@@ -468,6 +468,13 @@ func New(checkOCSP bool,
 	store.informers.Service.AddEventHandler(cache.ResourceEventHandlerFuncs{})
 
 	return store
+}
+
+func writeToRingChannelWithLog(ch *channels.RingChannel, event Event) {
+	if ch.Len() == ch.Cap() {
+		glog.Warningf("channel is full the write will likely discard the oldest value: capacity is %v, length is %v", ch.Cap(), ch.Len())
+	}
+	ch.In() <- event
 }
 
 // extractAnnotations parses ingress annotations converting the value of the

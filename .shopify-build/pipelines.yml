@@ -1,0 +1,18 @@
+containers:
+  production:
+    environment: production
+    build:
+      command: pipa build -x --push -- ./build.sh
+  ci:
+    environment: ci
+    build:
+      command: pipa build -x --push -- ./build.sh
+
+pipelines:
+  nginx-ingress-controller-ci:
+    steps:
+      - build: ci
+
+  nginx-ingress-controller-production:
+    steps:
+      - build: production
