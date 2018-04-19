@@ -48,6 +48,9 @@ end
 
 local function balance()
   local backend = get_current_backend()
+  if not backend then
+    return nil, nil
+  end
   local lb_alg = get_current_lb_alg()
   local is_sticky = sticky.is_sticky(backend)
 
@@ -164,6 +167,9 @@ function _M.call()
   ngx_balancer.set_more_tries(1)
 
   local host, port = balance()
+  if not host then
+    return error("balancer did not return a host")
+  end
 
   local ok
   ok, err = ngx_balancer.set_current_peer(host, port)
