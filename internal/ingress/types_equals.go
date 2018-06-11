@@ -262,16 +262,16 @@ func (s1 *Server) Equal(s2 *Server) bool {
 	if s1.SSLPassthrough != s2.SSLPassthrough {
 		return false
 	}
-	if s1.SSLCertificate != s2.SSLCertificate {
+	if s1.SSLCert.PemFileName != s2.SSLCert.PemFileName {
 		return false
 	}
-	if s1.SSLPemChecksum != s2.SSLPemChecksum {
+	if s1.SSLCert.PemSHA != s2.SSLCert.PemSHA {
 		return false
 	}
 	if !(&s1.CertificateAuth).Equal(&s2.CertificateAuth) {
 		return false
 	}
-	if s1.SSLFullChainCertificate != s2.SSLFullChainCertificate {
+	if s1.SSLCert.FullChainPemFileName != s2.SSLCert.FullChainPemFileName {
 		return false
 	}
 	if s1.RedirectFromToWWW != s2.RedirectFromToWWW {
