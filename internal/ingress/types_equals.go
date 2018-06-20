@@ -256,32 +256,41 @@ func (s1 *Server) Equal(s2 *Server) bool {
 	if s1.Hostname != s2.Hostname {
 		return false
 	}
-	if s1.Alias != s2.Alias {
-		return false
-	}
 	if s1.SSLPassthrough != s2.SSLPassthrough {
 		return false
 	}
 	if s1.SSLCert.PemFileName != s2.SSLCert.PemFileName {
 		return false
 	}
+	if s1.SSLCert.FullChainPemFileName != s2.SSLCert.FullChainPemFileName {
+		return false
+	}
+	if !s1.SSLExpireTime.Equal(s2.SSLExpireTime) {
+		return false
+	}
 	if s1.SSLCert.PemSHA != s2.SSLCert.PemSHA {
 		return false
 	}
-	if !(&s1.CertificateAuth).Equal(&s2.CertificateAuth) {
-		return false
-	}
-	if s1.SSLCert.FullChainPemFileName != s2.SSLCert.FullChainPemFileName {
+	if s1.Alias != s2.Alias {
 		return false
 	}
 	if s1.RedirectFromToWWW != s2.RedirectFromToWWW {
 		return false
 	}
-
-	if len(s1.Locations) != len(s2.Locations) {
+	if !(&s1.CertificateAuth).Equal(&s2.CertificateAuth) {
+		return false
+	}
+	if s1.ServerSnippet != s2.ServerSnippet {
 		return false
 	}
 	if s1.SSLCiphers != s2.SSLCiphers {
+		return false
+	}
+	if s1.AuthTLSError != s2.AuthTLSError {
+		return false
+	}
+
+	if len(s1.Locations) != len(s2.Locations) {
 		return false
 	}
 

@@ -18,7 +18,7 @@ all: all-container
 BUILDTAGS=
 
 # Use the 0.0 tag for testing, it shouldn't clobber any release builds
-TAG?=0.15.0
+TAG?=0.16.0-rc.5
 REGISTRY?=quay.io/kubernetes-ingress-controller
 GOOS?=linux
 DOCKER?=docker
@@ -59,7 +59,7 @@ IMAGE = $(REGISTRY)/$(IMGNAME)
 MULTI_ARCH_IMG = $(IMAGE)-$(ARCH)
 
 # Set default base image dynamically for each arch
-BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):0.49
+BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):0.52
 
 ifeq ($(ARCH),arm)
 	QEMUARCH=arm
@@ -78,7 +78,7 @@ ifeq ($(ARCH),s390x)
     QEMUARCH=s390x
 endif
 
-TEMP_DIR := $(shell mktemp -d)
+TEMP_DIR ?= $(shell mktemp -d)
 
 DOCKERFILE := $(TEMP_DIR)/rootfs/Dockerfile
 
@@ -154,6 +154,10 @@ build: clean
 .PHONY: verify-all
 verify-all:
 	@./hack/verify-all.sh
+
+.PHONY: verify-all-verbose
+verify-all:
+	@./hack/verify-all.sh -v	
 
 .PHONY: test
 test:
