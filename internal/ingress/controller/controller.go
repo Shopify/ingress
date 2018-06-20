@@ -858,10 +858,10 @@ func (n *NGINXController) createServers(data []*extensions.Ingress,
 
 	// initialize default server and root location
 	servers[defServerName] = &ingress.Server{
-		Hostname:       defServerName,
+		Hostname: defServerName,
 		SSLCert: ingress.SSLCert{
 			PemFileName: defaultPemFileName,
-			PemSHA: defaultPemSHA,
+			PemSHA:      defaultPemSHA,
 		},
 		Locations: []*ingress.Location{
 			{

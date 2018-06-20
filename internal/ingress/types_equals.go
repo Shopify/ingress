@@ -265,7 +265,7 @@ func (s1 *Server) Equal(s2 *Server) bool {
 	if s1.SSLCert.FullChainPemFileName != s2.SSLCert.FullChainPemFileName {
 		return false
 	}
-	if !s1.SSLExpireTime.Equal(s2.SSLExpireTime) {
+	if !s1.SSLCert.ExpireTime.Equal(s2.SSLCert.ExpireTime) {
 		return false
 	}
 	if s1.SSLCert.PemSHA != s2.SSLCert.PemSHA {
