@@ -115,7 +115,8 @@ func NewNGINXController(config *Configuration, fs file.Filesystem) *NGINXControl
 		config.ResyncPeriod,
 		config.Client,
 		fs,
-		n.updateCh)
+		n.updateCh,
+		config.DynamicConfigurationEnabled)
 
 	n.syncQueue = task.NewTaskQueue(n.syncIngress)
 
@@ -716,6 +717,18 @@ func (n *NGINXController) setupSSLProxy() {
 	}()
 }
 
+// Helper function to clear Certificates from the ingress configuration since they should be ignored when
+// checking if the new configuration changes can be applied dynamically
+func clearCertificates(config *ingress.Configuration) {
+	var clearedServers []*ingress.Server
+	for _, server := range config.Servers {
+		copyOfServer := *server
+		copyOfServer.SSLCert = ingress.SSLCert{}
+		clearedServers = append(clearedServers, &copyOfServer)
+	}
+	config.Servers = clearedServers
+}
+
 // IsDynamicConfigurationEnough returns whether a Configuration can be
 // dynamically applied, without reloading the backend.
 func (n *NGINXController) IsDynamicConfigurationEnough(pcfg *ingress.Configuration) bool {
@@ -724,6 +737,8 @@ func (n *NGINXController) IsDynamicConfigurationEnough(pcfg *ingress.Configurati
 
 	copyOfRunningConfig.Backends = []*ingress.Backend{}
 	copyOfPcfg.Backends = []*ingress.Backend{}
+	clearCertificates(&copyOfRunningConfig)
+	clearCertificates(&copyOfPcfg)
 
 	return copyOfRunningConfig.Equal(&copyOfPcfg)
 }
@@ -774,6 +789,48 @@ func configureDynamically(pcfg *ingress.Configuration, port int) error {
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
 			glog.Warningf("Error while closing response body:\n%v", err)
+		}
+	}()
+
+	if resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("Unexpected error code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// configureCerts JSON encodes certificates and POSTs it to an internal HTTP endpoint
+// that is handled by Lua
+func configureCerts(pcfg *ingress.Configuration, port int) error {
+	var servers []*ingress.Server
+
+	for _, server := range pcfg.Servers {
+		servers = append(servers, &ingress.Server{
+			Hostname: server.Hostname,
+			SSLCert: ingress.SSLCert{
+				PemCertKey: server.SSLCert.PemCertKey,
+			},
+		})
+	}
+
+	buf, err := json.Marshal(servers)
+
+	if err != nil {
+		return err
+	}
+
+	glog.Infof("posting servers: %s", buf)
+
+	url := fmt.Sprintf("http://localhost:%d/configuration/servers", port)
+	resp, err := http.Post(url, "application/json", bytes.NewReader(buf))
+
+	if err != nil {
+		return err
+	}
+
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			glog.Warningf("error while closing response body: \n%v", err)
 		}
 	}()
 

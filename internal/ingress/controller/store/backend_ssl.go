@@ -99,13 +99,19 @@ func (s k8sStore) getPemCertificate(secretName string) (*ingress.SSLCert, error)
 			return nil, fmt.Errorf("secret %v has no 'tls.key'", secretName)
 		}
 
-		// If 'ca.crt' is also present, it will allow this secret to be used in the
-		// 'nginx.ingress.kubernetes.io/auth-tls-secret' annotation
-		sslCert, err = ssl.AddOrUpdateCertAndKey(nsSecName, cert, key, ca, s.filesystem)
-		if err != nil {
-			return nil, fmt.Errorf("unexpected error creating pem file: %v", err)
+		if s.isDynamicConfigurationEnabled {
+			sslCert, err = ssl.CreateSSLCert(nsSecName, cert, key, ca, s.filesystem)
+			if err != nil {
+				return nil, fmt.Errorf("unexpected error creating SSL Cert: %v", err)
+			}
+		} else {
+			// If 'ca.crt' is also present, it will allow this secret to be used in the
+			// 'nginx.ingress.kubernetes.io/auth-tls-secret' annotation
+			sslCert, err = ssl.AddOrUpdateCertAndKey(nsSecName, cert, key, ca, s.filesystem)
+			if err != nil {
+				return nil, fmt.Errorf("unexpected error creating pem file: %v", err)
+			}
 		}
-
 		glog.V(3).Infof("found 'tls.crt' and 'tls.key', configuring %v as a TLS Secret (CN: %v)", secretName, sslCert.CN)
 		if ca != nil {
 			glog.V(3).Infof("found 'ca.crt', secret %v can also be used for Certificate Authentication", secretName)
@@ -148,7 +154,7 @@ func (s k8sStore) checkSSLChainIssues() {
 			continue
 		}
 
-		data, err := ssl.FullChainCert(secret.PemFileName, s.filesystem)
+		data, err := ssl.FullChainCert([]byte(secret.PemCertKey))
 		if err != nil {
 			glog.Errorf("unexpected error generating SSL certificate with full intermediate chain CA certs: %v", err)
 			continue

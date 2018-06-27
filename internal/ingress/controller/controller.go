@@ -197,6 +197,14 @@ func (n *NGINXController) syncIngress(interface{}) error {
 			} else {
 				glog.Warningf("Dynamic reconfiguration failed: %v", err)
 			}
+
+			// Configuring certificates
+			err = configureCerts(&pcfg, n.cfg.ListenPorts.Status)
+			if err == nil {
+				glog.Infof("dynamic certificate reconfiguration succeeded")
+			} else {
+				glog.Warningf("could not dynamically reconfigure certificate: %v", err)
+			}
 		}(isFirstSync)
 	}
 
@@ -1030,6 +1038,12 @@ func (n *NGINXController) createServers(data []*extensions.Ingress,
 			}
 
 			servers[host].SSLCert = *cert
+
+			if n.cfg.DynamicConfigurationEnabled {
+				// Certificates won't be written on disk during dynamic configuration mode
+				servers[host].SSLCert.PemFileName = defaultPemFileName
+				servers[host].SSLCert.PemSHA = defaultPemSHA
+			}
 
 			if cert.ExpireTime.Before(time.Now().Add(240 * time.Hour)) {
 				glog.Warningf("SSL certificate for server %q is about to expire (%v)", host, cert.ExpireTime)
