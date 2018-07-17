@@ -1,4 +1,3 @@
-local sh_util = require('shopify.util')
 local split = require('util.split')
 local ngx_upstream = require("ngx.upstream")
 
@@ -30,7 +29,6 @@ local function create_static_backend(upstream_name)
     sb.name = upstream_name
 
     sb.endpoints = ngx_upstream.get_servers(upstream_name)
-    ngx.log(ngx.ERR, "[static_upstreams] servers" .. sh_util.dump_table(sb.endpoints))
 
     for index, endpoint in ipairs(sb.endpoints) do
         sb.endpoints[index] = marshal_endpoint(endpoint)
@@ -43,13 +41,13 @@ end
 
 -- If any static upstream matches this pattern, add to _M.static_backends
 function _M.configure(pattern)
-    -- Exclude the special upstream.
     local upstreams = ngx_upstream.get_upstreams()
-    ngx.log(ngx.ERR, "[static_upstreams] upstreams" .. sh_util.dump_table(upstreams))
     for _, upstream_name in ipairs(upstreams) do
         if string.match(upstream_name, pattern) then
-            local sb = create_static_backend(upstream_name)
-            table.insert(_M.static_backends, sb)
+            if upstream_name ~= "upstream_balancer" then
+                local sb = create_static_backend(upstream_name)
+                _M.static_backends[upstream_name] = sb
+            end
         end
     end
 end

@@ -1,7 +1,7 @@
 local _M = {}
 
 -- splits strings into host and port
-local function parse_addr(addr)
+function _M.parse_addr(addr)
   local _, _, host, port = addr:find("([^:]+):([^:]+)")
   if host and port then
     return {host=host, port=port}
