@@ -5,6 +5,7 @@ local round_robin = require("balancer.round_robin")
 local chash = require("balancer.chash")
 local sticky = require("balancer.sticky")
 local ewma = require("balancer.ewma")
+local static_upstreams = require("balancer.static_upstreams")
 
 -- measured in seconds
 -- for an Nginx worker to pick up the new list of upstream peers
@@ -62,10 +63,14 @@ local function sync_backend(backend)
   balancer:sync(backend)
 end
 
+local function default_backends()
+  return static_upstreams.get()
+end
+
 local function sync_backends()
   local backends_data = configuration.get_backends_data()
   if not backends_data then
-    balancers = {}
+    balancers = default_backends()
     return
   end
 
@@ -75,7 +80,7 @@ local function sync_backends()
     return
   end
 
-  local balancers_to_keep = {}
+  local balancers_to_keep = default_backends()
   for _, new_backend in ipairs(new_backends) do
     sync_backend(new_backend)
     balancers_to_keep[new_backend.name] = balancers[new_backend.name]

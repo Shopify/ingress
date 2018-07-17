@@ -1,8 +1,9 @@
+local util = require('util')
 local split = require('util.split')
 local ngx_upstream = require("ngx.upstream")
 
 local _M = {}
-_M.static_backends = {}
+local static_backends = {}
 
 local DEFAULT_LB_ALG = "ewma"
 
@@ -39,20 +40,26 @@ local function create_static_backend(upstream_name)
     return sb
 end
 
--- If any static upstream matches this pattern, add to _M.static_backends
+-- If any static upstream matches this pattern, add to static_backends
 function _M.configure(pattern)
     local upstreams = ngx_upstream.get_upstreams()
     for _, upstream_name in ipairs(upstreams) do
         if string.match(upstream_name, pattern) then
             if upstream_name ~= "upstream_balancer" then
                 local sb = create_static_backend(upstream_name)
-                _M.static_backends[upstream_name] = sb
+                static_backends[upstream_name] = sb
             end
         end
     end
 end
 
-function _M.sync()
+function _M.get()
+    return util.deepcopy(static_backends)
+end
+
+-- How to only run this in test mode? _TEST doesn't seem to do it
+function _M.reset()
+    static_backends = {}
 end
 
 return _M
