@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e
+set -ex
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
@@ -27,6 +27,6 @@ cat $DIR/../manifests/ingress-controller/service-nodeport.yaml | kubectl apply -
 
 # wait for the deployment and fail if there is an error before starting the execution of any test
 kubectl rollout status \
-    --request-timeout=3m \
+    --request-timeout=0 \
     --namespace $NAMESPACE \
     deployment nginx-ingress-controller

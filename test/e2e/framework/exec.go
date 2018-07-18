@@ -19,6 +19,7 @@ package framework
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
 
 	"k8s.io/api/core/v1"
@@ -61,11 +62,15 @@ func (f *Framework) NewIngressController(namespace string) error {
 
 	err := cmd.Run()
 	if err != nil {
-		return fmt.Errorf("could not execute: %v", err)
-	}
+		err = fmt.Errorf("could not execute: %v", err)
 
-	if execErr.Len() > 0 {
-		return fmt.Errorf("stderr: %v", execErr.String())
+		fmt.Fprintf(os.Stderr, "stdout: %v", execOut.String())
+
+		if execErr.Len() > 0 {
+			fmt.Fprintf(os.Stderr, "stderr: %v", execErr.String())
+		}
+
+		return err
 	}
 
 	return nil
