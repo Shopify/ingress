@@ -41,14 +41,12 @@ local function create_static_backend(upstream_name)
 end
 
 -- If any static upstream matches this pattern, add to static_backends
-function _M.configure(pattern)
+function _M.configure()
     local upstreams = ngx_upstream.get_upstreams()
     for _, upstream_name in ipairs(upstreams) do
-        if string.match(upstream_name, pattern) then
-            if upstream_name ~= "upstream_balancer" then
-                local sb = create_static_backend(upstream_name)
-                static_backends[upstream_name] = sb
-            end
+        if upstream_name ~= "upstream_balancer" then
+            local sb = create_static_backend(upstream_name)
+            static_backends[upstream_name] = sb
         end
     end
 end
