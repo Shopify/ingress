@@ -12,6 +12,9 @@ local balancer, expected_implementations, backends
 local function reset_balancer()
   package.loaded["balancer"] = nil
   balancer = require("balancer")
+
+  package.loaded["balancer.implementations"] = nil
+  implementations = require("balancer.implementations")
 end
 
 local function reset_expected_implementations()
@@ -63,8 +66,8 @@ describe("Balancer", function()
     it("returns correct implementation for given backend", function()
       for _, backend in pairs(backends) do
         local expected_implementation = expected_implementations[backend.name]
-        local implementation = balancer.get_implementation(backend)
-        assert.equal(expected_implementation, balancer.get_implementation(backend))
+        local implementation = implementations.get(backend)
+        assert.equal(expected_implementation, implementations.get(backend))
       end
     end)
   end)
