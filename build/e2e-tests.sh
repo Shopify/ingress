@@ -61,3 +61,4 @@ ginkgo                  \
     -trace              \
     -nodes=${E2E_NODES} \
     test/e2e/e2e.test
+
