@@ -3,7 +3,7 @@ _G._TEST = true
 
 local util = require("util")
 
-describe("Balancer static upstreams", function()  
+describe("Static backends", function()
   local static_upstreams = require("balancer.static_upstreams")
 
   before_each(function()
@@ -13,17 +13,41 @@ describe("Balancer static upstreams", function()
   it("marshals static upstreams into the expected backend format", function()
       static_upstreams.configure()
 
-      local remote_pool1_ssl = static_upstreams.backends()["remote_pool1_ssl"]
-      assert.equal("remote_pool1_ssl", remote_pool1_ssl.name)
-      assert.equal("192.168.1.1", remote_pool1_ssl.endpoints[1].address)
-      assert.equal("443", remote_pool1_ssl.endpoints[1].port)
-      assert.equal("ewma", remote_pool1_ssl['load-balance'])
+      local pools = static_upstreams.backends()
 
-      local remote_pool2_ssl = static_upstreams.backends()["remote_pool2_ssl"]
-      assert.equal("remote_pool2_ssl", remote_pool2_ssl.name)
-      assert.equal("192.168.2.1", remote_pool2_ssl.endpoints[1].address)
-      assert.equal("443", remote_pool2_ssl.endpoints[1].port)
-      assert.equal("ewma", remote_pool2_ssl['load-balance'])
+      local expected_pool1 = {
+        ['load-balance'] = 'ewma',
+        endpoints = {
+          [1] = {
+            fail_timeout = 1,
+            max_fails = 2,
+            name = '192.168.1.1:443',
+            port = '443',
+            weight = 1,
+            address = '192.168.1.1',
+          }
+        },
+        name = 'remote_pool1_ssl',
+      }
+
+      assert.are.same(expected_pool1, pools["remote_pool1_ssl"])
+
+      local expected_pool2 = {
+        ['load-balance'] = 'ewma',
+        endpoints = {
+          [1] = {
+            fail_timeout = 1,
+            max_fails = 2,
+            name = '192.168.2.1:443',
+            port = '443',
+            weight = 1,
+            address = '192.168.2.1',
+          }
+        },
+        name = 'remote_pool2_ssl',
+      }
+
+      assert.are.same(expected_pool2, pools["remote_pool2_ssl"])
   end)
 
   it("grabs all valid upstreams", function()
@@ -37,8 +61,8 @@ describe("Balancer static upstreams", function()
   it("shouldn't include upstream_balancer", function()
     static_upstreams.configure()
 
-    local sb = static_upstreams.backends()["upstream_balancer"]
+    local sb = static_upstreams.backends()
 
-    assert.is_nil(sb)
+    assert.is_nil(sb["upstream_balancer"])
   end)
 end)
