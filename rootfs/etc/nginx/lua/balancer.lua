@@ -2,7 +2,6 @@ local ngx_balancer = require("ngx.balancer")
 local json = require("cjson")
 local configuration = require("configuration")
 local implementations = require("balancer.implementations")
-local static_balancers = require("balancer.static_balancers")
 
 -- measured in seconds
 -- for an Nginx worker to pick up the new list of upstream peers
@@ -11,6 +10,7 @@ local BACKENDS_SYNC_INTERVAL = 1
 
 local _M = {}
 local balancers = {}
+local static_balancers = require("balancer.static_balancers").get()
 
 local function sync_backend(backend)
   local implementation = implementations.get(backend)
@@ -34,14 +34,10 @@ local function sync_backend(backend)
   balancer:sync(backend)
 end
 
-local function default_backends()
-  return static_balancers.get()
-end
-
 local function sync_backends()
   local backends_data = configuration.get_backends_data()
   if not backends_data then
-    balancers = default_backends()
+    balancers = {}
     return
   end
 
@@ -51,7 +47,7 @@ local function sync_backends()
     return
   end
 
-  local balancers_to_keep = default_backends()
+  local balancers_to_keep = {}
   for _, new_backend in ipairs(new_backends) do
     sync_backend(new_backend)
     balancers_to_keep[new_backend.name] = balancers[new_backend.name]
@@ -66,7 +62,7 @@ end
 
 local function get_balancer()
   local backend_name = ngx.var.proxy_upstream_name
-  return balancers[backend_name]
+  return balancers[backend_name] or static_balancers[backend_name]
 end
 
 function _M.init_worker()
