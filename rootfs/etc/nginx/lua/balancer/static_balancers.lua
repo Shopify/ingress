@@ -54,8 +54,9 @@ local function populate_static_backends()
 end
 
 local function populate_static_balancers()
-    for _, backend in ipairs(static_backends) do
-        static_balancers[backend.name] = implementations.get(backend)
+    for _, backend in pairs(static_backends) do
+        local implementation = implementations.get(backend)
+        static_balancers[backend.name] = implementation:new(backend)
     end
 end
 
@@ -66,7 +67,7 @@ function _M.configure()
 end
 
 function _M.get()
-    return util.deepcopy(static_balancers)
+    return static_balancers
 end
 
 -- How to only run this in test mode? _TEST doesn't seem to do it

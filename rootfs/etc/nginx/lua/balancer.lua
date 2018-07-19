@@ -2,7 +2,7 @@ local ngx_balancer = require("ngx.balancer")
 local json = require("cjson")
 local configuration = require("configuration")
 local implementations = require("balancer.implementations")
-local static_upstreams = require("balancer.static_upstreams")
+local static_balancers = require("balancer.static_balancers")
 
 -- measured in seconds
 -- for an Nginx worker to pick up the new list of upstream peers
@@ -35,7 +35,7 @@ local function sync_backend(backend)
 end
 
 local function default_backends()
-  return static_upstreams.get()
+  return static_balancers.get()
 end
 
 local function sync_backends()
