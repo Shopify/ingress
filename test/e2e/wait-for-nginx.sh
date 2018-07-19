@@ -30,3 +30,5 @@ kubectl rollout status \
     --request-timeout=3m \
     --namespace $NAMESPACE \
     deployment nginx-ingress-controller
+
+kubectl logs -l app=ingress-nginx -n $NAMESPACE
