@@ -60,7 +60,6 @@ local function populate_static_balancers()
     end
 end
 
--- If any static upstream matches this pattern, add to static_backends
 function _M.configure()
     populate_static_backends()
     populate_static_balancers()
@@ -70,14 +69,15 @@ function _M.get()
     return static_balancers
 end
 
--- How to only run this in test mode? _TEST doesn't seem to do it
-function _M.reset()
-    static_backends = {}
-    static_balancers = {}
-end
-
 if _TEST then
-    _M.backends = function() return static_backends end
+    _M.backends = function()
+        return static_backends
+    end
+
+    _M.reset = function()
+        static_backends = {}
+        static_balancers = {}
+    end
 end
 
 return _M
