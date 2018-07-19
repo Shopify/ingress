@@ -41,6 +41,8 @@ func (f *Framework) ExecCommand(pod *v1.Pod, command string) (string, error) {
 		return "", fmt.Errorf("could not execute: %v", err)
 	}
 
+	Logf(execOut.String())
+	Logf(execErr.String())
 	if execErr.Len() > 0 {
 		return "", fmt.Errorf("stderr: %v", execErr.String())
 	}

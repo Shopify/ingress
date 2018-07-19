@@ -26,15 +26,6 @@ env:
 
 jobs:
   include:
-  - stage: Static Check
-    script:
-    - make static-check
-  - stage: Lua Unit Test
-    script:
-    - make lua-test
-  - stage: Coverage
-    script:
-    - make cover
   - stage: e2e
     before_script:
     - test/e2e/up.sh
