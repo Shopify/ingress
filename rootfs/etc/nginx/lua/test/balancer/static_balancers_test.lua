@@ -7,7 +7,8 @@ describe("Static balancers", function()
   local static_balancers = require("balancer.static_balancers")
 
   before_each(function()
-    static_balancers.reset()
+    package.loaded["balancer.static_balancers"] = nil
+    static_balancers = require("balancer.static_balancers")
   end)
 
   describe("Balancers", function()

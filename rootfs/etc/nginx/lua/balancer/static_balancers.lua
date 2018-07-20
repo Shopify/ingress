@@ -10,7 +10,7 @@ local DEFAULT_LB_ALG = "ewma"
 
 local _M = {}
 
-local function marshal_endpoint(endpoint)
+local function parse_endpoint(endpoint)
     if (not endpoint.address) or (not endpoint.port) then
         if endpoint.addr then
             local addr, err = split.parse_addr(endpoint.addr)
@@ -37,7 +37,7 @@ local function create_backend(upstream_name)
 
     local servers = ngx_upstream.get_servers(upstream_name)
     for _, server in ipairs(servers) do
-        local endpoint = marshal_endpoint(server)
+        local endpoint = parse_endpoint(server)
         table.insert(sb.endpoints, endpoint)
     end
 
@@ -73,11 +73,6 @@ end
 if _TEST then
     _M.backends = function()
         return backends
-    end
-
-    _M.reset = function()
-        backends = {}
-        balancers = {}
     end
 end
 
