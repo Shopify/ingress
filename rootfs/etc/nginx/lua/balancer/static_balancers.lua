@@ -1,4 +1,3 @@
-local util = require('util')
 local split = require('util.split')
 local ngx_upstream = require("ngx.upstream")
 local implementations = require('balancer.implementations')
@@ -25,7 +24,7 @@ local function parse_endpoint(endpoint)
             return endpoint, nil
         end
     end
-    return nil, "error in grabbing address & port" 
+    return nil, "error in grabbing address & port"
 end
 
 local function create_backend(upstream_name)

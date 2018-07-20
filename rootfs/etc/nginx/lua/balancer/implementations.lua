@@ -16,19 +16,20 @@ local _M = {}
 
 function _M.get(backend)
     local name = backend["load-balance"] or DEFAULT_LB_ALG
-  
+
     if backend["sessionAffinityConfig"] and backend["sessionAffinityConfig"]["name"] == "cookie" then
       name = "sticky"
     elseif backend["upstream-hash-by"] then
       name = "chash"
     end
-  
+
     local implementation = IMPLEMENTATIONS[name]
     if not implementation then
-      ngx.log(ngx.WARN, string.format("%s is not supported, falling back to %s", backend["load-balance"], DEFAULT_LB_ALG))
+      local warning = string.format("%s is not supported, falling back to %s", backend["load-balance"], DEFAULT_LB_ALG)
+      ngx.log(ngx.WARN, warning)
       implementation = IMPLEMENTATIONS[DEFAULT_LB_ALG]
     end
-  
+
     return implementation
   end
 
