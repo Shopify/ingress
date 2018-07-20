@@ -3,8 +3,8 @@ local split = require('util.split')
 local ngx_upstream = require("ngx.upstream")
 local implementations = require('balancer.implementations')
 
-local static_backends = {}
-local static_balancers = {}
+local backends = {}
+local balancers = {}
 
 local DEFAULT_LB_ALG = "ewma"
 
@@ -28,7 +28,7 @@ local function marshal_endpoint(endpoint)
     return nil, "error in grabbing address & port" 
 end
 
-local function create_static_backend(upstream_name)
+local function create_backend(upstream_name)
     local sb = {
         name = upstream_name,
         endpoints = {},
@@ -44,40 +44,40 @@ local function create_static_backend(upstream_name)
     return sb
 end
 
-local function populate_static_backends()
+local function populate_backends()
     local upstreams = ngx_upstream.get_upstreams()
     for _, upstream_name in ipairs(upstreams) do
         if upstream_name ~= "upstream_balancer" then
-            local sb = create_static_backend(upstream_name)
-            static_backends[upstream_name] = sb
+            local sb = create_backend(upstream_name)
+            backends[upstream_name] = sb
         end
     end
 end
 
-local function populate_static_balancers()
-    for _, backend in pairs(static_backends) do
+local function populate_balancers()
+    for _, backend in pairs(backends) do
         local implementation = implementations.get(backend)
-        static_balancers[backend.name] = implementation:new(backend)
+        balancers[backend.name] = implementation:new(backend)
     end
 end
 
 function _M.configure()
-    populate_static_backends()
-    populate_static_balancers()
+    populate_backends()
+    populate_balancers()
 end
 
 function _M.get()
-    return static_balancers
+    return balancers
 end
 
 if _TEST then
     _M.backends = function()
-        return static_backends
+        return backends
     end
 
     _M.reset = function()
-        static_backends = {}
-        static_balancers = {}
+        backends = {}
+        balancers = {}
     end
 end
 
