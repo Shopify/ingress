@@ -1,7 +1,7 @@
 local _M = {}
 
 -- splits strings into host and port
-local function parse_addr(addr)
+function _M.parse_addr(addr)
   local _, _, host, port = addr:find("([^:]+):([^:]+)")
   if host and port then
     return {host=host, port=port}
@@ -55,7 +55,7 @@ function _M.split_upstream_addr(addrs_str)
   local host_and_ports = {}
 
   for _, v in ipairs(addrs) do
-    local a, err = parse_addr(v)
+    local a, err = _M.parse_addr(v)
     if err then
       return nil, err
     end
