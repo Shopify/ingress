@@ -49,6 +49,8 @@ sudo -E minikube start \
     --extra-config=kubelet.sync-frequency=1s \
     --extra-config=apiserver.authorization-mode=RBAC
 
+eval $(minikube docker-env)
+
 minikube update-context
 
 echo "waiting for kubernetes cluster"
