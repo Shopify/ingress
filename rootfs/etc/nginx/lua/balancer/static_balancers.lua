@@ -29,16 +29,17 @@ local function marshal_endpoint(endpoint)
 end
 
 local function create_static_backend(upstream_name)
-    local sb = {}
-    sb.name = upstream_name
+    local sb = {
+        name = upstream_name,
+        endpoints = {},
+        ['load-balance'] = DEFAULT_LB_ALG
+    }
 
-    sb.endpoints = ngx_upstream.get_servers(upstream_name)
-
-    for index, endpoint in ipairs(sb.endpoints) do
-        sb.endpoints[index] = marshal_endpoint(endpoint)
+    local servers = ngx_upstream.get_servers(upstream_name)
+    for _, server in ipairs(servers) do
+        local endpoint = marshal_endpoint(server)
+        table.insert(sb.endpoints, endpoint)
     end
-
-    sb['load-balance'] = DEFAULT_LB_ALG
 
     return sb
 end
