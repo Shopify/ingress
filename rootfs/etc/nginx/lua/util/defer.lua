@@ -2,7 +2,7 @@ local util = require("util")
 
 local timer_started = false
 local queue = {}
-local MAX_QUEUE_SIZE = 10000
+local MAX_QUEUE_SIZE = 2
 
 local _M = {}
 
@@ -11,6 +11,7 @@ local function flush_queue(premature)
   -- shutting down.
   if premature then return end
 
+  ngx.log(ngx.WARN, "started flush_queue")
   local current_queue = queue
   queue = {}
   timer_started = false
@@ -37,13 +38,15 @@ function _M.to_timer_phase(func, ...)
   end
 
   table.insert(queue, { func = func, args = {...} })
+  ngx.log(ngx.WARN, "timer_started is: " .. tostring(timer_started))
   if not timer_started then
     local ok, err = ngx.timer.at(0, flush_queue)
     if ok then
       -- unfortunately this is to deal with tests - when running unit tests, we
       -- dont actually run the timer, we call the function inline
       if util.tablelength(queue) > 0 then
-        timer_started = true
+        ngx.log(ngx.WARN, "timer_started is set to true")
+        timer_started = true -- but pending since queue is not empty. The first thing flush_queue does it to flush it
       end
     else
       local msg = "failed to create timer: " .. tostring(err)
