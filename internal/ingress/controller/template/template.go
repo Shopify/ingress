@@ -403,7 +403,7 @@ func buildProxyPass(host string, b interface{}, loc interface{}, dynamicConfigur
 	}
 
 	path := location.Path
-	proto := "http"
+	proto := "$proxy_pass_scheme"
 
 	proxyPass := "proxy_pass"
 	if location.GRPC {
