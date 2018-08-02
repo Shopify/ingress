@@ -693,9 +693,9 @@ stream {
             rewrite                (.*) / break;
 
             {{ if $dynamicConfig }}
-            proxy_pass            http://upstream_balancer;
+            proxy_pass            $proxy_pass_scheme://upstream_balancer;
             {{ else }}
-            proxy_pass            http://upstream-default-backend;
+            proxy_pass            $proxy_pass_scheme://upstream-default-backend;
             {{ end }}
         }
         {{ end }}
@@ -1126,6 +1126,7 @@ stream {
             proxy_set_header       X-Service-Name     $service_name;
             proxy_set_header       X-Service-Port     $service_port;
             {{ end }}
+            set $proxy_pass_scheme http;
 
             {{ if not (empty $location.Backend) }}
             {{ buildProxyPass $server.Hostname $all.Backends $location $all.DynamicConfigurationEnabled }}
