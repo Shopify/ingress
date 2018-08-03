@@ -503,6 +503,7 @@ http {
     ## start server {{ $server.Hostname }}
     server {
         server_name {{ $server.Hostname }} {{ $server.Alias }};
+        set $proxy_pass_scheme http;
         {{ template "SERVER" serverConfig $all $server }}
 
         {{ if not (empty $cfg.ServerSnippet) }}
@@ -1126,7 +1127,6 @@ stream {
             proxy_set_header       X-Service-Name     $service_name;
             proxy_set_header       X-Service-Port     $service_port;
             {{ end }}
-            set $proxy_pass_scheme http;
 
             {{ if not (empty $location.Backend) }}
             {{ buildProxyPass $server.Hostname $all.Backends $location $all.DynamicConfigurationEnabled }}
