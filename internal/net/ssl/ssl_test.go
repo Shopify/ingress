@@ -147,3 +147,32 @@ func newFS(t *testing.T) file.Filesystem {
 	}
 	return fs
 }
+
+func TestCreateSSLCert(t *testing.T) {
+	cert, _, err := generateRSACerts("echoheaders")
+	if err != nil {
+		t.Fatalf("unexpected error creating SSL certificate: %v", err)
+	}
+
+	name := fmt.Sprintf("test-%v", time.Now().UnixNano())
+
+	c := certutil.EncodeCertPEM(cert.Cert)
+	k := certutil.EncodePrivateKeyPEM(cert.Key)
+
+	ngxCert, err := CreateSSLCert(name, c, k, []byte{})
+	if err != nil {
+		t.Fatalf("unexpected error checking SSL certificate: %v", err)
+	}
+
+	if ngxCert.PemCertKey == "" {
+		t.Fatalf("expected concatenated pem cert and key but returned empty")
+	}
+
+	if len(ngxCert.CN) == 0 {
+		t.Fatalf("expected at least one cname but none returned")
+	}
+
+	if ngxCert.CN[0] != "echoheaders" {
+		t.Fatalf("expected cname echoheaders but %v returned", ngxCert.CN[0])
+	}
+}

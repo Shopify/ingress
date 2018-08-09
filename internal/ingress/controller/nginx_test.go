@@ -52,6 +52,9 @@ func TestIsDynamicConfigurationEnough(t *testing.T) {
 				Backend: "fakenamespace-myapp-80",
 			},
 		},
+		SSLCert: ingress.SSLCert{
+			PemCertKey: "fake-certificate",
+		},
 	}}
 
 	commonConfig := &ingress.Configuration{
@@ -87,11 +90,40 @@ func TestIsDynamicConfigurationEnough(t *testing.T) {
 		t.Errorf("Expected to be dynamically configurable when only backends change")
 	}
 
+	newServers := []*ingress.Server{{
+		Hostname: "myapp.fake",
+		Locations: []*ingress.Location{
+			{
+				Path:    "/",
+				Backend: "fakenamespace-myapp-80",
+			},
+		},
+		SSLCert: ingress.SSLCert{
+			PemCertKey: "new-fake-certificate",
+		},
+	}}
+
+	newConfig = &ingress.Configuration{
+		Backends: backends,
+		Servers:  newServers,
+	}
+	if !n.IsDynamicConfigurationEnough(newConfig) {
+		t.Errorf("Expected to be dynamically configurable when only SSLCert changes")
+	}
+
+	newConfig = &ingress.Configuration{
+		Backends: []*ingress.Backend{{Name: "a-backend-8080"}},
+		Servers:  newServers,
+	}
+	if !n.IsDynamicConfigurationEnough(newConfig) {
+		t.Errorf("Expected to be dynamically configurable when backend and SSLCert changes")
+	}
+
 	if !n.runningConfig.Equal(commonConfig) {
 		t.Errorf("Expected running config to not change")
 	}
 
-	if !newConfig.Equal(&ingress.Configuration{Backends: []*ingress.Backend{{Name: "a-backend-8080"}}, Servers: servers}) {
+	if !newConfig.Equal(&ingress.Configuration{Backends: []*ingress.Backend{{Name: "a-backend-8080"}}, Servers: newServers}) {
 		t.Errorf("Expected new config to not change")
 	}
 }
@@ -157,13 +189,57 @@ func TestConfigureDynamically(t *testing.T) {
 	port := ts.Listener.Addr().(*net.TCPAddr).Port
 	defer ts.Close()
 
-	err := configureDynamically(commonConfig, port)
+	err := configureDynamically(commonConfig, port, false)
 	if err != nil {
 		t.Errorf("unexpected error posting dynamic configuration: %v", err)
 	}
 
 	if commonConfig.Backends[0].Endpoints[0].Target != target {
 		t.Errorf("unexpected change in the configuration object after configureDynamically invocation")
+	}
+}
+
+func TestConfigureCertificates(t *testing.T) {
+
+	servers := []*ingress.Server{{
+		Hostname: "myapp.fake",
+		SSLCert: ingress.SSLCert{
+			PemCertKey: "fake-cert",
+		},
+	}}
+
+	commonConfig := &ingress.Configuration{
+		Servers: servers,
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+
+		if r.Method != "POST" {
+			t.Errorf("expected a 'POST' request, got '%s'", r.Method)
+		}
+
+		b, err := ioutil.ReadAll(r.Body)
+		if err != nil && err != io.EOF {
+			t.Fatal(err)
+		}
+		body := string(b)
+		if strings.Index(body, "target") != -1 {
+			t.Errorf("unexpected target reference in JSON content: %v", body)
+		}
+
+		if strings.Index(body, "service") != -1 {
+			t.Errorf("unexpected service reference in JSON content: %v", body)
+		}
+
+	}))
+
+	port := ts.Listener.Addr().(*net.TCPAddr).Port
+	defer ts.Close()
+
+	err := configureCertificates(commonConfig, port)
+	if err != nil {
+		t.Errorf("unexpected error posting dynamic certificate configuration: %v", err)
 	}
 }
 
