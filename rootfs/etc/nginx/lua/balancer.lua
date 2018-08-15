@@ -82,7 +82,12 @@ local function sync_backend(backend)
   balancer:sync(backend)
 end
 
-local function sync_backends()
+local function sync_backends(premature)
+  if premature then
+    ngx.log(ngx.WARN, "worker exiting? timer prematurely expired: " .. tostring(premature))
+    return
+  end
+
   local backends_data = configuration.get_backends_data()
   if not backends_data then
     balancers = {}

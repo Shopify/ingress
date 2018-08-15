@@ -35,6 +35,10 @@ worker_rlimit_nofile {{ .MaxOpenFiles }};
 {{/* avoid waiting too long during a reload */}}
 worker_shutdown_timeout {{ $cfg.WorkerShutdownTimeout }} ;
 
+worker_rlimit_core  500M;
+working_directory   /etc/nginx/cores/;
+debug_points abort;
+
 events {
     multi_accept        {{ if $cfg.EnableMultiAccept }}on{{ else }}off{{ end }};
     worker_connections  {{ $cfg.MaxWorkerConnections }};
@@ -84,25 +88,10 @@ http {
         else
           balancer = res
         end
-
-        ok, res = pcall(require, "statsd_monitor")
-        if not ok then
-            error("require(statsd_monitor) failed: " .. tostring(res))
-        else
-            statsd_monitor = res
-        end
         {{ end }}
-
-        ok, res = pcall(require, "monitor")
-        if not ok then
-          error("require failed: " .. tostring(res))
-        else
-          monitor = res
-        end
     }
 
     init_worker_by_lua_block {
-        defer_to_timer.init_worker()
         {{ if $all.DynamicConfigurationEnabled }}
         balancer.init_worker()
         {{ end }}
@@ -926,10 +915,7 @@ stream {
                 {{ end }}
                 {{ if $all.DynamicConfigurationEnabled}}
                 balancer.log()
-                statsd_monitor.call()
                 {{ end }}
-
-                monitor.call()
             }
             {{ end }}
 

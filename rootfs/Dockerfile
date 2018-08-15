@@ -20,7 +20,10 @@ WORKDIR  /etc/nginx
 
 RUN clean-install \
   diffutils \
-  dumb-init
+  dumb-init \
+  gdb \
+  strace \
+  python
 
 COPY . /
 
@@ -28,6 +31,7 @@ COPY . /
 # with volumes (custom templates)
 RUN bash -eu -c ' \
   writeDirs=( \
+    /etc/nginx/cores \
     /etc/nginx/template \
     /etc/ingress-controller/ssl \
     /etc/ingress-controller/auth \
@@ -44,7 +48,9 @@ RUN bash -eu -c ' \
 
 # Create symlinks to redirect nginx logs to stdout and stderr docker log collector
 # This only works if nginx is started with CMD or ENTRYPOINT
-RUN ln -sf /dev/stdout /var/log/nginx/access.log
-RUN ln -sf /dev/stderr /var/log/nginx/error.log
+#RUN ln -sf /dev/stdout /var/log/nginx/access.log
+#RUN ln -sf /dev/stderr /var/log/nginx/error.log
+
+ENV MALLOC_CHECK_=3
 
 CMD ["/nginx-ingress-controller"]

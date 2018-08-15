@@ -244,7 +244,7 @@ fi
 # luajit is not available on ppc64le and s390x
 if [[ (${ARCH} != "ppc64le") && (${ARCH} != "s390x") ]]; then
   cd "$BUILD_PATH/luajit2-2.1-20180420"
-  make
+  make CCDEBUG=-g
   make install
 
   export LUAJIT_LIB=/usr/local/lib
@@ -444,7 +444,7 @@ fi
 
 # "Combining -flto with -g is currently experimental and expected to produce unexpected results."
 # https://gcc.gnu.org/onlinedocs/gcc/Optimize-Options.html
-CC_OPT="-g -Og -fPIE -fstack-protector-strong \
+CC_OPT="-g -O0 -fPIE -fstack-protector-strong \
   -Wformat \
   -Werror=format-security \
   -Wno-deprecated-declarations \
@@ -457,7 +457,7 @@ CC_OPT="-g -Og -fPIE -fstack-protector-strong \
   -I$HUNTER_INSTALL_DIR/include \
   -Wno-cast-function-type"
 
-LD_OPT="-ljemalloc -fPIE -fPIC -pie -Wl,-z,relro -Wl,-z,now -L$HUNTER_INSTALL_DIR/lib"
+LD_OPT="-fPIE -fPIC -pie -Wl,-z,relro -Wl,-z,now -L$HUNTER_INSTALL_DIR/lib"
 
 if [[ ${ARCH} == "x86_64" ]]; then
   CC_OPT+=' -m64 -mtune=native'
