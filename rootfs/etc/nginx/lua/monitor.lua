@@ -1,5 +1,6 @@
 local socket = ngx.socket.tcp
 local cjson = require('cjson')
+local defer_to_timer = require("defer_to_timer")
 local assert = assert
 
 local metrics_batch = {}
@@ -67,6 +68,11 @@ function _M.init_worker()
 end
 
 function _M.call()
+  local err = defer_to_timer.enqueue(send_data, _M.encode_nginx_stats())
+  if err then
+    ngx.log(ngx.ERR, "failed to defer send_data to timer phase: ", err)
+  end
+
   if #metrics_batch >= MAX_BATCH_SIZE then
     ngx.log(ngx.WARN, "omiting metrics for the request, current batch is full")
     return
