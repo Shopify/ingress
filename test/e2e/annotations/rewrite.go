@@ -117,4 +117,65 @@ var _ = framework.IngressNginxDescribe("Annotations - Rewrite", func() {
 		Expect(logs).To(ContainSubstring(`"(?i)/something$" matches "/something", client:`))
 		Expect(logs).To(ContainSubstring(`rewritten data: "/", args: "",`))
 	})
+
+	It("should use correct longest path match", func() {
+		host := "rewrite.bar.com"
+		annotations := map[string]string{}
+		rewrite_annotations := map[string]string{
+			"nginx.ingress.kubernetes.io/rewrite-target":     "/new/backend",
+			"nginx.ingress.kubernetes.io/enable-rewrite-log": "true",
+		}
+
+		By("creating a regular ingress definition")
+		ing := framework.NewSingleIngress("kube-lego", "/.well-known/acme/challenge", host, f.IngressController.Namespace, "http-svc", 80, &annotations)
+		_, err := f.EnsureIngress(ing)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ing).NotTo(BeNil())
+
+		err = f.WaitForNginxServer(host,
+		func(server string) bool {
+			return strings.Contains(server, "/.well-known/acme/challenge")
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("making a request to the non-rewritten location")
+		resp, _, errs := gorequest.New().
+			Get(f.IngressController.HTTPURL+"/.well-known/acme/challenge").
+			Set("Host", host).
+			End()
+		
+		Expect(len(errs)).Should(Equal(0))
+		Expect(resp.StatusCode).Should(Equal(http.StatusOK))
+
+		logs, err := f.NginxLogs()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(logs).ToNot(ContainSubstring(`"(?i)/(.*)" matches "/.well-known/acme/challenge", client:`))
+		Expect(logs).ToNot(ContainSubstring(`rewritten data: "/new/backend/.well-known/acme/challenge", args: "",`))
+
+		By(`creating an ingress definition with the rewrite-target annotation set on the "/" location`)
+		rewrite_ing := framework.NewSingleIngress("rewrite-index", "/", host, f.IngressController.Namespace, "http-svc", 80, &rewrite_annotations)
+		_, err = f.EnsureIngress(rewrite_ing)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ing).NotTo(BeNil())
+
+		err = f.WaitForNginxServer(host,
+			func(server string) bool {
+				return strings.Contains(server, "~*")
+			})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("making a second request to the non-rewritten location")
+		resp, _, errs = gorequest.New().
+			Get(f.IngressController.HTTPURL+"/.well-known/acme/challenge").
+			Set("Host", host).
+			End()
+	
+		Expect(len(errs)).Should(Equal(0))
+		Expect(resp.StatusCode).Should(Equal(http.StatusOK))
+
+		logs, err = f.NginxLogs()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(logs).ToNot(ContainSubstring(`"(?i)/(.*)" matches "/.well-known/acme/challenge", client:`))
+		Expect(logs).ToNot(ContainSubstring(`rewritten data: "/new/backend/.well-known/acme/challenge", args: "",`))
+	})
 })
