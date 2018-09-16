@@ -31,6 +31,6 @@ env:
 jobs:
   include:
   - stage: publish amd64
-    if: type = push AND branch = release-nginx AND repo = Shopify/ingress
+    if: type = push AND repo = Shopify/ingress
     script:
     - COMPONENT=nginx .travis/publish.sh amd64
