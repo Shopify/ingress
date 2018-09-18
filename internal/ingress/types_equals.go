@@ -84,6 +84,9 @@ func (b1 *Backend) Equal(b2 *Backend) bool {
 	if b1.Name != b2.Name {
 		return false
 	}
+	if b1.Virtual != b2.Virtual {
+		return false
+	}
 
 	if b1.Service != b2.Service {
 		if b1.Service == nil || b2.Service == nil {
@@ -124,6 +127,23 @@ func (b1 *Backend) Equal(b2 *Backend) bool {
 		found := false
 		for _, udp2 := range b2.Endpoints {
 			if (&udp1).Equal(&udp2) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	if !b1.VirtualMetadata.Equal(b2.VirtualMetadata) {
+		return false
+	}
+
+	for _, vb1 := range b1.VirtualBackends {
+		found := false
+		for _, vb2 := range b2.VirtualBackends {
+			if (vb1).Equal(vb2) {
 				found = true
 				break
 			}
@@ -197,6 +217,21 @@ func (e1 *Endpoint) Equal(e2 *Endpoint) bool {
 		if e1.Target.ResourceVersion != e2.Target.ResourceVersion {
 			return false
 		}
+	}
+
+	return true
+}
+
+// Equal checks for equality between two VirtualMetadatas
+func (vm1 VirtualMetadata) Equal(vm2 VirtualMetadata) bool {
+	if vm1.Weight != vm2.Weight {
+		return false
+	}
+	if vm1.Header != vm2.Header {
+		return false
+	}
+	if vm1.Cookie != vm2.Cookie {
+		return false
 	}
 
 	return true

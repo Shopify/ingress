@@ -85,6 +85,30 @@ type Backend struct {
 	UpstreamHashBy string `json:"upstream-hash-by,omitempty"`
 	// LB algorithm configuration per ingress
 	LoadBalancing string `json:"load-balance,omitempty"`
+	// Denotes if a backend is virtual. A virtual backend is not backed by it's own server and instead shares
+	// a server with another, non-virtual backend. This can be used to share multiple upstreams in the same
+	// nginx server block.
+	Virtual bool `json:"virtual"`
+	// Additional metadata to describe the characteristics of a virtual backend.
+	// +optional
+	VirtualMetadata VirtualMetadata `json:"virtualMetadata,omitempty"`
+	// Contains a list of backends with the virtual flag enabled that are associated with this real backend and server.
+	// +optional
+	VirtualBackends []*Backend `json:"virtualBackends,omitempty"`
+}
+
+// VirtualMetadata describes a normal Backend that is not backed by a Server. Instead, The virtual backend
+// shares a server with a real Backend.
+// +k8s:deepcopy-gen=true
+type VirtualMetadata struct {
+	// Weight (0-100) of traffic to redirect to the virtual backend.
+	// e.g. Weight 20 means 20% of traffic will be redirected to the virtual backend and 80% will remain
+	// with the real backend. 0 Weight will not send any traffic to the virtual backend
+	Weight int `json:"weight"`
+	// Header on which to redirect requests to the virtual backend
+	Header string `json:"header"`
+	// Cookie on which to redirect requests to the virtual backend
+	Cookie string `json:"cookie"`
 }
 
 // HashInclude defines if a field should be used or not to calculate the hash

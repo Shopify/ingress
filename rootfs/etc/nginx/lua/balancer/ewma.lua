@@ -158,7 +158,10 @@ function _M.sync(self, backend)
 end
 
 function _M.new(self, backend)
-  local o = { peers = backend.endpoints }
+  local o = {
+    peers = backend.endpoints,
+    virtual_backends = backend.virtualBackends
+  }
   setmetatable(o, self)
   self.__index = self
   return o

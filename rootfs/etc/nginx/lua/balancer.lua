@@ -124,7 +124,42 @@ end
 
 local function get_balancer()
   local backend_name = ngx.var.proxy_upstream_name
-  return balancers[backend_name]
+
+  local balancer = balancers[backend_name]
+
+  if not balancer.virtual_backends then
+    return balancer
+  end
+
+  -- TODO: support traffic shaping for n > 1 virtual backends
+  local virtual_backend = balancer.virtual_backends[1]
+
+  local header = ngx.var["http_" .. virtual_backend.virtualMetadata.header]
+  if header then
+    if header == "always" then
+      return balancers[virtual_backend.name]
+    elseif header == "never" then
+      return balancer
+    end
+  end
+
+  local cookie = ngx.var["cookie_" .. virtual_backend.virtualMetadata.cookie]
+  if cookie then
+    if cookie == "always" then
+      return balancers[virtual_backend.name]
+    elseif cookie == "never" then
+      return balancer
+    end
+  end
+
+  -- TODO: this function has a left-hand bias which produces
+  -- slightly smaller real weighting than ancitipated
+  if math.random(0,100) <= virtual_backend.virtualMetadata.weight then
+    ngx.log(ngx.INFO, "routing request to backend " .. virtual_backend.name)
+    return balancers[virtual_backend.name]
+  end
+
+  return balancer
 end
 
 function _M.init_worker()
