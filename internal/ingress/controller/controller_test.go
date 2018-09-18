@@ -20,12 +20,191 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"testing"
 
 	extensions "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/ingress-nginx/internal/ingress"
 )
+
+func TestMergeVirtualBackends(t *testing.T) {
+	testCases := map[string]struct {
+		ingress               *extensions.Ingress
+		upstreams             map[string]*ingress.Backend
+		servers               map[string]*ingress.Server
+		expNumVirtualBackends int
+		expNumLocations       int
+	}{
+		"virtual backend has no server and embeds into matching real backend": {
+			&extensions.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "example",
+				},
+				Spec: extensions.IngressSpec{
+					Rules: []extensions.IngressRule{
+						{
+							Host: "example.com",
+							IngressRuleValue: extensions.IngressRuleValue{
+								HTTP: &extensions.HTTPIngressRuleValue{
+									Paths: []extensions.HTTPIngressPath{
+										{
+											Path: "/",
+											Backend: extensions.IngressBackend{
+												ServiceName: "http-svc-canary",
+												ServicePort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 80,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			map[string]*ingress.Backend{
+				"example-http-svc-80": {
+					Name:     "example-http-svc-80",
+					NoServer: false,
+				},
+				"example-http-svc-canary-80": {
+					Name:     "example-http-svc-canary-80",
+					NoServer: true,
+					TrafficShapingPolicy: ingress.TrafficShapingPolicy{
+						Weight: 20,
+					},
+				},
+			},
+			map[string]*ingress.Server{
+				"example.com": {
+					Hostname: "example.com",
+					Locations: []*ingress.Location{
+						{
+							Path:    "/",
+							Backend: "example-http-svc-80",
+						},
+					},
+				},
+			},
+			1,
+			1,
+		},
+		"merging a virtual backend matches with the correct host": {
+			&extensions.Ingress{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "example",
+				},
+				Spec: extensions.IngressSpec{
+					Rules: []extensions.IngressRule{
+						{
+							Host: "foo.bar",
+							IngressRuleValue: extensions.IngressRuleValue{
+								HTTP: &extensions.HTTPIngressRuleValue{
+									Paths: []extensions.HTTPIngressPath{
+										{
+											Path: "/",
+											Backend: extensions.IngressBackend{
+												ServiceName: "foo-http-svc-canary",
+												ServicePort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 80,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+						{
+							Host: "example.com",
+							IngressRuleValue: extensions.IngressRuleValue{
+								HTTP: &extensions.HTTPIngressRuleValue{
+									Paths: []extensions.HTTPIngressPath{
+										{
+											Path: "/",
+											Backend: extensions.IngressBackend{
+												ServiceName: "http-svc-canary",
+												ServicePort: intstr.IntOrString{
+													Type:   intstr.Int,
+													IntVal: 80,
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			map[string]*ingress.Backend{
+				"example-foo-http-svc-80": {
+					Name:     "example-foo-http-svc-80",
+					NoServer: false,
+				},
+				"example-foo-http-svc-canary-80": {
+					Name:     "example-foo-http-svc-canary-80",
+					NoServer: true,
+					TrafficShapingPolicy: ingress.TrafficShapingPolicy{
+						Weight: 20,
+					},
+				},
+				"example-http-svc-80": {
+					Name:     "example-http-svc-80",
+					NoServer: false,
+				},
+				"example-http-svc-canary-80": {
+					Name:     "example-http-svc-canary-80",
+					NoServer: true,
+					TrafficShapingPolicy: ingress.TrafficShapingPolicy{
+						Weight: 20,
+					},
+				},
+			},
+			map[string]*ingress.Server{
+				"foo.bar": {
+					Hostname: "foo.bar",
+					Locations: []*ingress.Location{
+						{
+							Path:    "/",
+							Backend: "example-foo-http-svc-80",
+						},
+					},
+				},
+				"example.com": {
+					Hostname: "example.com",
+					Locations: []*ingress.Location{
+						{
+							Path:    "/",
+							Backend: "example-http-svc-80",
+						},
+					},
+				},
+			},
+			1,
+			1,
+		},
+	}
+
+	for title, tc := range testCases {
+		t.Run(title, func(t *testing.T) {
+			mergeAlternativeBackends(tc.ingress, tc.upstreams, tc.servers)
+
+			numVirtualBackends := len(tc.upstreams["example-http-svc-80"].AlternativeBackends)
+			if numVirtualBackends != tc.expNumVirtualBackends {
+				t.Errorf("expected %d virtual backends (got %d)", tc.expNumVirtualBackends, numVirtualBackends)
+			}
+
+			numLocations := len(tc.servers["example.com"].Locations)
+			if numLocations != tc.expNumLocations {
+				t.Errorf("expected %d locations (got %d)", tc.expNumLocations, numLocations)
+			}
+		})
+	}
+}
 
 func TestExtractTLSSecretName(t *testing.T) {
 	testCases := map[string]struct {
