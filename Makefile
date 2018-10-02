@@ -16,7 +16,7 @@
 all: all-container
 
 # Use the 0.0 tag for testing, it shouldn't clobber any release builds
-TAG ?= 0.19.0
+TAG ?= 0.19.0-rc.3
 REGISTRY ?= quay.io/kubernetes-ingress-controller
 DOCKER ?= docker
 SED_I ?= sed -i
@@ -61,7 +61,7 @@ IMAGE = $(REGISTRY)/$(IMGNAME)
 MULTI_ARCH_IMG = $(IMAGE)-$(ARCH)
 
 # Set default base image dynamically for each arch
-BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):0.62
+BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):0.63
 
 ifeq ($(ARCH),arm)
 	QEMUARCH=arm
