@@ -93,6 +93,33 @@ BODY:
 -no body in request-
 ```
 
+### Dynamic Rewrite Target
+
+Create an Ingress rule with a rewrite annotation:
+
+```console
+$ echo "
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+  name: rewrite
+  namespace: default
+spec:
+  rules:
+  - host: rewrite.bar.com
+    http:
+      paths:
+      - backend:
+          serviceName: http-svc
+          servicePort: 80
+        path: /something/(.+)
+" | kubectl create -f -
+```
+
+In this case a request to `rewrite.bar.com/something/new` will redirect to `rewrite.bar.com/new`.
+
 ### App Root
 
 Create an Ingress rule with a app-root annotation:

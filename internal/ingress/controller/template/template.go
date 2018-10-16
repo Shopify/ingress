@@ -491,16 +491,17 @@ func buildProxyPass(host string, b interface{}, loc interface{}) string {
 		return defProxyPass
 	}
 
-	if !strings.HasSuffix(path, slash) {
-		path = fmt.Sprintf("%s/", path)
-	}
-
 	if len(location.Rewrite.Target) > 0 {
 		var abu string
 		var xForwardedPrefix string
 
 		if location.Rewrite.AddBaseURL {
-			bPath := fmt.Sprintf("%s$escaped_base_uri", path)
+			bPath := ""
+			if !strings.HasSuffix(path, slash) {
+				bPath = fmt.Sprintf("%s/$escaped_base_uri", path)
+			} else {
+				bPath = fmt.Sprintf("%s$escaped_base_uri", path)
+			}
 			regex := `(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)`
 			scheme := "$scheme"
 
@@ -518,21 +519,10 @@ subs_filter '%v' '$1<base href="%v://$http_host%v">' ro;
 			xForwardedPrefix = fmt.Sprintf("proxy_set_header X-Forwarded-Prefix \"%s\";\n", path)
 		}
 
-		if location.Rewrite.Target == slash {
-			// special case redirect to /
-			// ie /something to /
-			return fmt.Sprintf(`
-rewrite "(?i)%s(.*)" /$1 break;
-rewrite "(?i)%s$" / break;
-%v%v %s%s;
-%v`, path, location.Path, xForwardedPrefix, proxyPass, proto, upstreamName, abu)
-		}
-
 		return fmt.Sprintf(`
-rewrite "(?i)%s(.*)" %s/$1 break;
-rewrite "(?i)%s$" %s/ break;
+rewrite "(?i)%s" %s break;
 %v%v %s%s;
-%v`, path, location.Rewrite.Target, location.Path, location.Rewrite.Target, xForwardedPrefix, proxyPass, proto, upstreamName, abu)
+%v`, path, location.Rewrite.Target, xForwardedPrefix, proxyPass, proto, upstreamName, abu)
 	}
 
 	// default proxy_pass
