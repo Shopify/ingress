@@ -44,8 +44,6 @@ var (
 		Target           string
 		Location         string
 		ProxyPass        string
-		AddBaseURL       bool
-		BaseURLScheme    string
 		Sticky           bool
 		XForwardedPrefix bool
 		SecureBackend    bool
@@ -57,8 +55,6 @@ var (
 			"/",
 			"proxy_pass https://upstream_balancer;",
 			false,
-			"",
-			false,
 			false,
 			true,
 			false,
@@ -69,8 +65,6 @@ var (
 			"/",
 			"proxy_pass https://upstream_balancer;",
 			false,
-			"",
-			false,
 			false,
 			true,
 			false,
@@ -80,8 +74,6 @@ var (
 			"/",
 			"/",
 			"proxy_pass https://upstream_balancer;",
-			false,
-			"",
 			true,
 			false,
 			true,
@@ -93,8 +85,6 @@ var (
 			"/",
 			"proxy_pass http://upstream_balancer;",
 			false,
-			"",
-			false,
 			false,
 			false,
 			false,
@@ -105,8 +95,6 @@ var (
 			"/",
 			"proxy_pass http://upstream_balancer;",
 			false,
-			"",
-			false,
 			false,
 			false,
 			false,
@@ -114,148 +102,10 @@ var (
 		"redirect / to /jenkins": {
 			"/",
 			"/jenkins",
-			"~* ^/",
+			`~* "^/"`,
 			`
 rewrite "(?i)/" /jenkins break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something to /": {
-			"/something",
-			"/",
-			`~* "^/something\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something" / break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /end-with-slash/ to /not-root": {
-			"/end-with-slash/",
-			"/not-root",
-			`~* "^/end-with-slash/(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/end-with-slash/" /not-root break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something-complex to /not-root": {
-			"/something-complex",
-			"/not-root",
-			`~* "^/something-complex\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something-complex" /not-root break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect / to /jenkins and rewrite": {
-			"/",
-			"/jenkins",
-			"~* ^/",
-			`
-rewrite "(?i)/" /jenkins break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="$scheme://$http_host/$escaped_base_uri">' ro;
-`,
-			true,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something to / and rewrite": {
-			"/something",
-			"/",
-			`~* "^/something\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something" / break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="$scheme://$http_host/something/$escaped_base_uri">' ro;
-`,
-			true,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /end-with-slash/ to /not-root and rewrite": {
-			"/end-with-slash/",
-			"/not-root",
-			`~* "^/end-with-slash/(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/end-with-slash/" /not-root break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="$scheme://$http_host/end-with-slash/$escaped_base_uri">' ro;
-`,
-			true,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something-complex to /not-root and rewrite": {
-			"/something-complex",
-			"/not-root",
-			`~* "^/something-complex\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something-complex" /not-root break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="$scheme://$http_host/something-complex/$escaped_base_uri">' ro;
-`,
-			true,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something to / and rewrite with specific scheme": {
-			"/something",
-			"/",
-			`~* "^/something\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something" / break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="http://$http_host/something/$escaped_base_uri">' ro;
-`,
-			true,
-			"http",
+proxy_pass http://upstream_balancer;`,
 			false,
 			false,
 			false,
@@ -264,13 +114,10 @@ subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="
 		"redirect / to /something with sticky enabled": {
 			"/",
 			"/something",
-			`~* ^/`,
+			`~* "^/"`,
 			`
 rewrite "(?i)/" /something break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"http",
+proxy_pass http://upstream_balancer;`,
 			true,
 			false,
 			false,
@@ -279,13 +126,10 @@ proxy_pass http://upstream_balancer;
 		"redirect / to /something with sticky and dynamic config enabled": {
 			"/",
 			"/something",
-			`~* ^/`,
+			`~* "^/"`,
 			`
 rewrite "(?i)/" /something break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"http",
+proxy_pass http://upstream_balancer;`,
 			true,
 			false,
 			false,
@@ -294,14 +138,11 @@ proxy_pass http://upstream_balancer;
 		"add the X-Forwarded-Prefix header": {
 			"/there",
 			"/something",
-			`~* "^/there\/?(?<baseuri>.*)"`,
+			`~* "^/there"`,
 			`
 rewrite "(?i)/there" /something break;
 proxy_set_header X-Forwarded-Prefix "/there";
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"http",
+proxy_pass http://upstream_balancer;`,
 			true,
 			true,
 			false,
@@ -312,8 +153,6 @@ proxy_pass http://upstream_balancer;
 			"/something",
 			`~* "^/something"`,
 			"proxy_pass http://upstream_balancer;",
-			false,
-			"",
 			false,
 			false,
 			false,
@@ -372,7 +211,7 @@ func TestBuildLocation(t *testing.T) {
 	for k, tc := range tmplFuncTestcases {
 		loc := &ingress.Location{
 			Path:    tc.Path,
-			Rewrite: rewrite.Config{Target: tc.Target, AddBaseURL: tc.AddBaseURL},
+			Rewrite: rewrite.Config{Target: tc.Target},
 		}
 
 		newLoc := buildLocation(loc, tc.enforceRegex)
@@ -389,7 +228,7 @@ func TestBuildProxyPass(t *testing.T) {
 	for k, tc := range tmplFuncTestcases {
 		loc := &ingress.Location{
 			Path:             tc.Path,
-			Rewrite:          rewrite.Config{Target: tc.Target, AddBaseURL: tc.AddBaseURL, BaseURLScheme: tc.BaseURLScheme},
+			Rewrite:          rewrite.Config{Target: tc.Target},
 			Backend:          defaultBackend,
 			XForwardedPrefix: tc.XForwardedPrefix,
 		}
@@ -764,7 +603,7 @@ func TestBuildUpstreamName(t *testing.T) {
 	for k, tc := range tmplFuncTestcases {
 		loc := &ingress.Location{
 			Path:             tc.Path,
-			Rewrite:          rewrite.Config{Target: tc.Target, AddBaseURL: tc.AddBaseURL, BaseURLScheme: tc.BaseURLScheme},
+			Rewrite:          rewrite.Config{Target: tc.Target},
 			Backend:          defaultBackend,
 			XForwardedPrefix: tc.XForwardedPrefix,
 		}

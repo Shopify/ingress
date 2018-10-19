@@ -111,7 +111,7 @@ var _ = framework.IngressNginxDescribe("Annotations - Rewrite", func() {
 
 		err = f.WaitForNginxServer(host,
 			func(server string) bool {
-				return strings.Contains(server, "location ~* ^/ {") && strings.Contains(server, `location ~* "^/.well-known/acme/challenge" {`)
+				return strings.Contains(server, `location ~* "^/" {`) && strings.Contains(server, `location ~* "^/.well-known/acme/challenge" {`)
 			})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -152,7 +152,7 @@ var _ = framework.IngressNginxDescribe("Annotations - Rewrite", func() {
 
 		err = f.WaitForNginxServer(host,
 			func(server string) bool {
-				return strings.Contains(server, `location ~* "^/foo" {`) && strings.Contains(server, `location ~* "^/foo.+\/?(?<baseuri>.*)" {`)
+				return strings.Contains(server, `location ~* "^/foo" {`) && strings.Contains(server, `location ~* "^/foo.+" {`)
 			})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -198,7 +198,7 @@ var _ = framework.IngressNginxDescribe("Annotations - Rewrite", func() {
 
 		err = f.WaitForNginxServer(host,
 			func(server string) bool {
-				return strings.Contains(server, `location ~* "^/foo/bar/bar" {`) && strings.Contains(server, `location ~* "^/foo/bar/[a-z]{3}\/?(?<baseuri>.*)" {`)
+				return strings.Contains(server, `location ~* "^/foo/bar/bar" {`) && strings.Contains(server, `location ~* "^/foo/bar/[a-z]{3}" {`)
 			})
 		Expect(err).NotTo(HaveOccurred())
 
@@ -228,7 +228,7 @@ var _ = framework.IngressNginxDescribe("Annotations - Rewrite", func() {
 
 		err = f.WaitForNginxServer(host,
 			func(server string) bool {
-				return strings.Contains(server, `location ~* "^/foo/bar/(.+)\/?(?<baseuri>.*)" {`)
+				return strings.Contains(server, `location ~* "^/foo/bar/(.+)" {`)
 			})
 		Expect(err).NotTo(HaveOccurred())
 
