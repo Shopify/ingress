@@ -15,8 +15,6 @@ Rewriting can be controlled using the following annotations:
 |Name|Description|Values|
 | --- | --- | --- |
 |nginx.ingress.kubernetes.io/rewrite-target|Target URI where the traffic must be redirected|string|
-|nginx.ingress.kubernetes.io/add-base-url|indicates if is required to add a base tag in the head of the responses from the upstream servers|bool|
-|nginx.ingress.kubernetes.io/base-url-scheme|Override for the scheme passed to the base tag|string|
 |nginx.ingress.kubernetes.io/ssl-redirect|Indicates if the location section is accessible SSL only (defaults to True when Ingress contains a Certificate)|bool|
 |nginx.ingress.kubernetes.io/force-ssl-redirect|Forces the redirection to HTTPS even if the Ingress is not TLS Enabled|bool|
 |nginx.ingress.kubernetes.io/app-root|Defines the Application Root that the Controller must redirect if it's in '/' context|string|
