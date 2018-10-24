@@ -304,8 +304,8 @@ func (n *NGINXController) getBackendServers(ingresses []*extensions.Ingress) ([]
 
 				ups := upstreams[upsName]
 
-				// Virtual backends are not referenced to by any servers
-				if ups.Virtual {
+				// Backend is not referenced to by a server
+				if ups.NoServer {
 					continue
 				}
 
@@ -421,7 +421,7 @@ func (n *NGINXController) getBackendServers(ingresses []*extensions.Ingress) ([]
 
 		if anns.Canary.Enabled {
 			glog.Infof("Canary ingress %v detected. Finding eligible backends to merge into.", ing.Name)
-			mergeVirtualBackends(ing, upstreams, servers)
+			mergeAlternativeBackends(ing, upstreams, servers)
 		}
 	}
 
@@ -546,10 +546,10 @@ func (n *NGINXController) createUpstreams(data []*extensions.Ingress, du *ingres
 				}
 			}
 
-			// marks the upstream as virtual for association with real upstream
+			// configure traffic shaping for canary
 			if anns.Canary.Enabled {
-				upstreams[defBackend].Virtual = true
-				upstreams[defBackend].VirtualMetadata = ingress.VirtualMetadata{
+				upstreams[defBackend].NoServer = true
+				upstreams[defBackend].TrafficShapingPolicy = ingress.TrafficShapingPolicy{
 					Weight: anns.Canary.Weight,
 					Header: anns.Canary.Header,
 					Cookie: anns.Canary.Cookie,
@@ -606,10 +606,10 @@ func (n *NGINXController) createUpstreams(data []*extensions.Ingress, du *ingres
 					}
 				}
 
-				// marks the upstream as virtual for association with real upstream
+				// configure traffic shaping for canary
 				if anns.Canary.Enabled {
-					upstreams[name].Virtual = true
-					upstreams[name].VirtualMetadata = ingress.VirtualMetadata{
+					upstreams[name].NoServer = true
+					upstreams[name].TrafficShapingPolicy = ingress.TrafficShapingPolicy{
 						Weight: anns.Canary.Weight,
 						Header: anns.Canary.Header,
 						Cookie: anns.Canary.Cookie,
@@ -991,11 +991,11 @@ func (n *NGINXController) createServers(data []*extensions.Ingress,
 	return servers
 }
 
-// Compares an Ingress with virtual backend's rules with each server and finds matching host + path pairs.
-// If a match is found, we know that this server should back the virtual backend and add the virtual backend
-// to the real backend.
-// If no match is found, then this virtual backend has no real backend and thus no server backing. It is then deleted.
-func mergeVirtualBackends(ing *extensions.Ingress, upstreams map[string]*ingress.Backend,
+// Compares an Ingress of a potential alternative backend's rules with each existing server and finds matching host + path pairs.
+// If a match is found, we know that this server should back the alternative backend and add the alternative backend
+// to a backend's alternative list.
+// If no match is found, then the serverless backend is deleted.
+func mergeAlternativeBackends(ing *extensions.Ingress, upstreams map[string]*ingress.Backend,
 	servers map[string]*ingress.Server) {
 
 	for _, rule := range ing.Spec.Rules {
@@ -1004,7 +1004,7 @@ func mergeVirtualBackends(ing *extensions.Ingress, upstreams map[string]*ingress
 
 			ups := upstreams[upsName]
 
-			if ups.Virtual {
+			if ups.NoServer {
 				merged := false
 
 				// find matching paths
@@ -1018,12 +1018,12 @@ func mergeVirtualBackends(ing *extensions.Ingress, upstreams map[string]*ingress
 							continue
 						}
 
-						if location.Path == path.Path && !upstreams[location.Backend].Virtual {
-							glog.V(3).Infof("matching real backend %v found for virtual backend %v",
+						if location.Path == path.Path && !upstreams[location.Backend].NoServer {
+							glog.V(3).Infof("matching backend %v found for alternative backend %v",
 								upstreams[location.Backend].Name, ups.Name)
 
-							upstreams[location.Backend].VirtualBackends =
-								append(upstreams[location.Backend].VirtualBackends, ups)
+							upstreams[location.Backend].AlternativeBackends =
+								append(upstreams[location.Backend].AlternativeBackends, ups)
 
 							merged = true
 						}
@@ -1031,7 +1031,7 @@ func mergeVirtualBackends(ing *extensions.Ingress, upstreams map[string]*ingress
 				}
 
 				if !merged {
-					glog.Warningf("unable to find real backend for virtual backend %v. Deleting.", ups.Name)
+					glog.Warningf("unable to find real backend for alternative backend %v. Deleting.", ups.Name)
 					delete(upstreams, ups.Name)
 				}
 			}

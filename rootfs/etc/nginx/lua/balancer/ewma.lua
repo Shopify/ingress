@@ -160,7 +160,7 @@ end
 function _M.new(self, backend)
   local o = {
     peers = backend.endpoints,
-    virtual_backends = backend.virtualBackends
+    alternative_backends = backend.alternativeBackends
   }
   setmetatable(o, self)
   self.__index = self

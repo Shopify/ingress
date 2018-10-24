@@ -84,7 +84,7 @@ func (b1 *Backend) Equal(b2 *Backend) bool {
 	if b1.Name != b2.Name {
 		return false
 	}
-	if b1.Virtual != b2.Virtual {
+	if b1.NoServer != b2.NoServer {
 		return false
 	}
 
@@ -136,13 +136,13 @@ func (b1 *Backend) Equal(b2 *Backend) bool {
 		}
 	}
 
-	if !b1.VirtualMetadata.Equal(b2.VirtualMetadata) {
+	if !b1.TrafficShapingPolicy.Equal(b2.TrafficShapingPolicy) {
 		return false
 	}
 
-	for _, vb1 := range b1.VirtualBackends {
+	for _, vb1 := range b1.AlternativeBackends {
 		found := false
-		for _, vb2 := range b2.VirtualBackends {
+		for _, vb2 := range b2.AlternativeBackends {
 			if (vb1).Equal(vb2) {
 				found = true
 				break
@@ -222,15 +222,15 @@ func (e1 *Endpoint) Equal(e2 *Endpoint) bool {
 	return true
 }
 
-// Equal checks for equality between two VirtualMetadatas
-func (vm1 VirtualMetadata) Equal(vm2 VirtualMetadata) bool {
-	if vm1.Weight != vm2.Weight {
+// Equal checks for equality between two TrafficShapingPolicies
+func (tsp1 TrafficShapingPolicy) Equal(tsp2 TrafficShapingPolicy) bool {
+	if tsp1.Weight != tsp2.Weight {
 		return false
 	}
-	if vm1.Header != vm2.Header {
+	if tsp1.Header != tsp2.Header {
 		return false
 	}
-	if vm1.Cookie != vm2.Cookie {
+	if tsp1.Cookie != tsp2.Cookie {
 		return false
 	}
 

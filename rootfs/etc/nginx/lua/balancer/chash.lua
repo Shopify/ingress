@@ -9,7 +9,7 @@ function _M.new(self, backend)
   local o = {
     instance = self.factory:new(nodes),
     hash_by = backend["upstream-hash-by"],
-    virtual_backends = backend.virtualBackends,
+    alternative_backends = backend.alternativeBackends,
   }
   setmetatable(o, self)
   self.__index = self

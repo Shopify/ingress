@@ -127,26 +127,26 @@ local function get_balancer()
 
   local balancer = balancers[backend_name]
 
-  if not balancer.virtual_backends then
+  if not balancer.alternative_backends then
     return balancer
   end
 
-  -- TODO: support traffic shaping for n > 1 virtual backends
-  local virtual_backend = balancer.virtual_backends[1]
+  -- TODO: support traffic shaping for n > 1 alternative backends
+  local alternative_backend = balancer.alternative_backends[1]
 
-  local header = ngx.var["http_" .. virtual_backend.virtualMetadata.header]
+  local header = ngx.var["http_" .. alternative_backend.trafficShapingPolicy.header]
   if header then
     if header == "always" then
-      return balancers[virtual_backend.name]
+      return balancers[alternative_backend.name]
     elseif header == "never" then
       return balancer
     end
   end
 
-  local cookie = ngx.var["cookie_" .. virtual_backend.virtualMetadata.cookie]
+  local cookie = ngx.var["cookie_" .. alternative_backend.trafficShapingPolicy.cookie]
   if cookie then
     if cookie == "always" then
-      return balancers[virtual_backend.name]
+      return balancers[alternative_backend.name]
     elseif cookie == "never" then
       return balancer
     end
@@ -154,9 +154,9 @@ local function get_balancer()
 
   -- TODO: this function has a left-hand bias which produces
   -- slightly smaller real weighting than ancitipated
-  if math.random(0,100) <= virtual_backend.virtualMetadata.weight then
-    ngx.log(ngx.INFO, "routing request to backend " .. virtual_backend.name)
-    return balancers[virtual_backend.name]
+  if math.random(0,100) <= alternative_backend.trafficShapingPolicy.weight then
+    ngx.log(ngx.INFO, "routing request to backend " .. alternative_backend.name)
+    return balancers[alternative_backend.name]
   end
 
   return balancer

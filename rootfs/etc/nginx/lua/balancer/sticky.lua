@@ -16,7 +16,7 @@ function _M.new(self, backend)
     instance = self.factory:new(nodes),
     cookie_name = backend["sessionAffinityConfig"]["cookieSessionAffinity"]["name"] or "route",
     digest_func = digest_func,
-    virtual_backends = backend.virtualBackends,
+    alternative_backends = backend.alternativeBackends,
   }
   setmetatable(o, self)
   self.__index = self

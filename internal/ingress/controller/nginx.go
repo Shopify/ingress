@@ -760,16 +760,16 @@ func configureDynamically(pcfg *ingress.Configuration, port int, isDynamicCertif
 			service = &apiv1.Service{Spec: backend.Service.Spec}
 		}
 		luaBackend := &ingress.Backend{
-			Name:            backend.Name,
-			Port:            backend.Port,
-			SSLPassthrough:  backend.SSLPassthrough,
-			SessionAffinity: backend.SessionAffinity,
-			UpstreamHashBy:  backend.UpstreamHashBy,
-			LoadBalancing:   backend.LoadBalancing,
-			Service:         service,
-			Virtual:         backend.Virtual,
-			VirtualMetadata: backend.VirtualMetadata,
-			VirtualBackends: backend.VirtualBackends,
+			Name:                 backend.Name,
+			Port:                 backend.Port,
+			SSLPassthrough:       backend.SSLPassthrough,
+			SessionAffinity:      backend.SessionAffinity,
+			UpstreamHashBy:       backend.UpstreamHashBy,
+			LoadBalancing:        backend.LoadBalancing,
+			Service:              service,
+			NoServer:             backend.NoServer,
+			TrafficShapingPolicy: backend.TrafficShapingPolicy,
+			AlternativeBackends:  backend.AlternativeBackends,
 		}
 
 		var endpoints []ingress.Endpoint

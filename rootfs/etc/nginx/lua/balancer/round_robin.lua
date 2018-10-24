@@ -8,7 +8,7 @@ function _M.new(self, backend)
   local nodes = util.get_nodes(backend.endpoints)
   local o = {
     instance = self.factory:new(nodes),
-    virtual_backends = backend.virtualBackends,
+    alternative_backends = backend.alternativeBackends,
   }
   setmetatable(o, self)
   self.__index = self

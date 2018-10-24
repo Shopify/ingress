@@ -67,13 +67,13 @@ func TestMergeVirtualBackends(t *testing.T) {
 			},
 			map[string]*ingress.Backend{
 				"example-http-svc-80": {
-					Name:    "example-http-svc-80",
-					Virtual: false,
+					Name:     "example-http-svc-80",
+					NoServer: false,
 				},
 				"example-http-svc-canary-80": {
-					Name:    "example-http-svc-canary-80",
-					Virtual: true,
-					VirtualMetadata: ingress.VirtualMetadata{
+					Name:     "example-http-svc-canary-80",
+					NoServer: true,
+					TrafficShapingPolicy: ingress.TrafficShapingPolicy{
 						Weight: 20,
 					},
 				},
@@ -142,24 +142,24 @@ func TestMergeVirtualBackends(t *testing.T) {
 			},
 			map[string]*ingress.Backend{
 				"example-foo-http-svc-80": {
-					Name:    "example-foo-http-svc-80",
-					Virtual: false,
+					Name:     "example-foo-http-svc-80",
+					NoServer: false,
 				},
 				"example-foo-http-svc-canary-80": {
-					Name:    "example-foo-http-svc-canary-80",
-					Virtual: true,
-					VirtualMetadata: ingress.VirtualMetadata{
+					Name:     "example-foo-http-svc-canary-80",
+					NoServer: true,
+					TrafficShapingPolicy: ingress.TrafficShapingPolicy{
 						Weight: 20,
 					},
 				},
 				"example-http-svc-80": {
-					Name:    "example-http-svc-80",
-					Virtual: false,
+					Name:     "example-http-svc-80",
+					NoServer: false,
 				},
 				"example-http-svc-canary-80": {
-					Name:    "example-http-svc-canary-80",
-					Virtual: true,
-					VirtualMetadata: ingress.VirtualMetadata{
+					Name:     "example-http-svc-canary-80",
+					NoServer: true,
+					TrafficShapingPolicy: ingress.TrafficShapingPolicy{
 						Weight: 20,
 					},
 				},
@@ -191,9 +191,9 @@ func TestMergeVirtualBackends(t *testing.T) {
 
 	for title, tc := range testCases {
 		t.Run(title, func(t *testing.T) {
-			mergeVirtualBackends(tc.ingress, tc.upstreams, tc.servers)
+			mergeAlternativeBackends(tc.ingress, tc.upstreams, tc.servers)
 
-			numVirtualBackends := len(tc.upstreams["example-http-svc-80"].VirtualBackends)
+			numVirtualBackends := len(tc.upstreams["example-http-svc-80"].AlternativeBackends)
 			if numVirtualBackends != tc.expNumVirtualBackends {
 				t.Errorf("expected %d virtual backends (got %d)", tc.expNumVirtualBackends, numVirtualBackends)
 			}
