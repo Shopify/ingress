@@ -18,6 +18,7 @@ package store
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -732,6 +733,7 @@ func newStore(t *testing.T) *k8sStore {
 			// add more listers if needed
 			Ingress:           IngressLister{cache.NewStore(cache.MetaNamespaceKeyFunc)},
 			IngressAnnotation: IngressAnnotationsLister{cache.NewStore(cache.DeletionHandlingMetaNamespaceKeyFunc)},
+			Pod:               PodLister{cache.NewStore(cache.MetaNamespaceKeyFunc)},
 		},
 		sslStore:         NewSSLCertTracker(),
 		filesystem:       fs,
@@ -942,4 +944,81 @@ func TestWriteSSLSessionTicketKey(t *testing.T) {
 			t.Fatalf("expected %v but returned %s", test, encodedContent)
 		}
 	}
+}
+
+func TestListControllerPods(t *testing.T) {
+	s := newStore(t)
+
+	os.Setenv("POD_NAMESPACE", "testns")
+	os.Setenv("POD_NAME", "ingress-1")
+
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ingress-1",
+			Namespace: "testns",
+			OwnerReferences: []metav1.OwnerReference{
+				metav1.OwnerReference{
+					UID: "owner-1",
+				},
+			},
+		},
+		Status: v1.PodStatus{
+			Phase: v1.PodRunning,
+		},
+	}
+	s.listers.Pod.Add(pod)
+
+	pod = &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ingress-2",
+			Namespace: "testns",
+			OwnerReferences: []metav1.OwnerReference{
+				metav1.OwnerReference{
+					UID: "owner-1",
+				},
+			},
+		},
+		Status: v1.PodStatus{
+			Phase: v1.PodRunning,
+		},
+	}
+	s.listers.Pod.Add(pod)
+
+	pod = &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ingress-3",
+			Namespace: "testns",
+			OwnerReferences: []metav1.OwnerReference{
+				metav1.OwnerReference{
+					UID: "owner-1",
+				},
+			},
+		},
+		Status: v1.PodStatus{
+			Phase: v1.PodFailed,
+		},
+	}
+	s.listers.Pod.Add(pod)
+
+	pod = &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "other-test-1",
+			Namespace: "testns",
+			OwnerReferences: []metav1.OwnerReference{
+				metav1.OwnerReference{
+					UID: "owner-2",
+				},
+			},
+		},
+		Status: v1.PodStatus{
+			Phase: v1.PodRunning,
+		},
+	}
+	s.listers.Pod.Add(pod)
+
+	pods := s.ListControllerPods()
+	if s := len(pods); s != 2 {
+		t.Errorf("Expected 1 controller Pods but got %v", s)
+	}
+
 }
