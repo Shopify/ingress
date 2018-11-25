@@ -10,6 +10,8 @@ local split = require("util.split")
 
 local DECAY_TIME = 10 -- this value is in seconds
 local PICK_SET_SIZE = 2
+local SERVER_TIMING_HEADER = "Server-Timing"
+local SERVER_TIMING_UTIL = "util"
 
 local balancer_ewma = {}
 local balancer_ewma_last_touched_at = {}
@@ -75,6 +77,35 @@ local function pick_and_score(peers, k)
   return peers[lowest_score_index]
 end
 
+local function parse_server_timing_durations(rawheader)
+  local durationTable = {}
+  if type(rawheader) ~= "string" then
+    return durationTable
+  end
+
+  for word in string.gmatch(rawheader, '([^,]+)') do
+    local name = string.match(word, "([%w_-]+);?")
+    local matched = string.match(word, "dur[%s]?=[%s]?(%d*.?%d*)")
+    durationTable[name] = tonumber(matched)
+  end
+
+  return durationTable
+end
+
+local function ewma_score()
+  local raw_server_timing = ngx.header[SERVER_TIMING_HEADER]
+  if raw_server_timing then
+    local timing_table = parse_server_timing_durations(raw_server_timing)
+    if timing_table and timing_table[SERVER_TIMING_UTIL] ~= nil then
+      return timing_table[SERVER_TIMING_UTIL]
+    end
+  end
+
+  local response_time = tonumber(split.get_first_value(ngx.var.upstream_response_time)) or 0
+  local connect_time = tonumber(split.get_first_value(ngx.var.upstream_connect_time)) or 0
+  return connect_time + response_time
+end
+
 function _M.balance(self)
   local peers = self.peers
   local endpoint = peers[1]
@@ -90,14 +121,11 @@ function _M.balance(self)
 end
 
 function _M.after_balance(_)
-  local response_time = tonumber(split.get_first_value(ngx.var.upstream_response_time)) or 0
-  local connect_time = tonumber(split.get_first_value(ngx.var.upstream_connect_time)) or 0
-  local rtt = connect_time + response_time
   local upstream = split.get_first_value(ngx.var.upstream_addr)
-
   if util.is_blank(upstream) then
     return
   end
+  local rtt = ewma_score()
   get_or_update_ewma(upstream, rtt, true)
 end
 
