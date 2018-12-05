@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # 0.0.0 shouldn't clobber any released builds
-TAG ?= 0.43
+TAG ?= 0.52
 REGISTRY ?= quay.io/kubernetes-ingress-controller
 ARCH ?= $(shell go env GOARCH)
 DOCKER ?= docker
@@ -26,7 +26,7 @@ ifeq ($(GOHOSTOS),darwin)
   SED_I=sed -i ''
 endif
 
-QEMUVERSION=v2.9.1-1
+QEMUVERSION=v2.12.0
 
 IMGNAME = nginx
 IMAGE = $(REGISTRY)/$(IMGNAME)
@@ -76,8 +76,6 @@ ifeq ($(ARCH),amd64)
 	cd $(TEMP_DIR) && $(SED_I) "/CROSS_BUILD_/d" Dockerfile
 else
 	# When cross-building, only the placeholder "CROSS_BUILD_" should be removed
-	# Register /usr/bin/qemu-ARCH-static as the handler for ARM binaries in the kernel
-	$(DOCKER) run --rm --privileged multiarch/qemu-user-static:register --reset
 	curl -sSL https://github.com/multiarch/qemu-user-static/releases/download/$(QEMUVERSION)/x86_64_qemu-$(QEMUARCH)-static.tar.gz | tar -xz -C $(TEMP_DIR)
 	cd $(TEMP_DIR) && $(SED_I) "s/CROSS_BUILD_//g" Dockerfile
 endif
@@ -88,6 +86,11 @@ ifeq ($(ARCH), amd64)
 	# This is for to maintain the backward compatibility
 	$(DOCKER) tag $(MULTI_ARCH_IMG):$(TAG) $(IMAGE):$(TAG)
 endif
+
+.PHONY: register-qemu
+register-qemu:
+	# Register /usr/bin/qemu-ARCH-static as the handler for binaries in multiple platforms
+	$(DOCKER) run --rm --privileged multiarch/qemu-user-static:register --reset
 
 push: .push-$(ARCH)
 .push-$(ARCH): .container-$(ARCH)

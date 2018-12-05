@@ -25,7 +25,7 @@
 
 ## Description
 
-This repository contains the NGINX controller built around the [Kubernetes Ingress resource](http://kubernetes.io/docs/user-guide/ingress/) that uses [ConfigMap](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#understanding-configmaps-and-pods) to store the NGINX configuration.
+This repository contains the NGINX controller built around the [Kubernetes Ingress resource](http://kubernetes.io/docs/user-guide/ingress/) that uses [ConfigMap](https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#understanding-configmaps-and-pods) to store the NGINX configuration. [Make Ingress-Nginx Work for you, and the Community](https://youtu.be/GDm-7BlmPPg) from KubeCon Europe 2018 is a great video to get you started!!
 
 Learn more about using Ingress on [k8s.io](http://kubernetes.io/docs/user-guide/ingress/)
 
@@ -45,7 +45,7 @@ To check out [Live Docs](https://kubernetes.github.io/ingress-nginx/)
 
 ## Questions
 
-For questions and support please use the kubernetes-users room in the [Kubernetes Slack](http://slack.kubernetes.io/) or [kubernetes-users](https://groups.google.com/forum/#!forum/kubernetes-users) mailing list. The issue list of this repo is **exclusively** for bug reports and feature requests.
+For questions and support please use the [#ingress-nginx](https://kubernetes.slack.com/messages/CANQGM8BA/) channel in the [Kubernetes Slack](http://slack.kubernetes.io/) or [kubernetes-users](https://groups.google.com/forum/#!forum/kubernetes-users) mailing list. The issue list of this repo is **exclusively** for bug reports and feature requests.
 
 
 ## Issues
@@ -55,7 +55,7 @@ Please make sure to read the [Issue Reporting Checklist](https://github.com/kube
 
 ## Changelog
 
-Detailed changes for each release are documented in the [CHANGELOG.md](CHANGELOG.md)
+Detailed changes for each release are documented in the [Changelog.md](Changelog.md)
 
 
 ## Contribution

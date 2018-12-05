@@ -44,10 +44,6 @@ The following table shows a configuration option's name, type, and the default v
 |[disable-ipv6-dns](#disable-ipv6-dns)|bool|false|
 |[enable-underscores-in-headers](#enable-underscores-in-headers)|bool|false|
 |[ignore-invalid-headers](#ignore-invalid-headers)|bool|true|
-|[enable-vts-status](#enable-vts-status)|bool|false|
-|[vts-status-zone-size](#vts-status-zone-size)|string|"10m"|
-|[vts-sum-key](#vts-sum-key)|string|"*"|
-|[vts-default-filter-key](#vts-default-filter-key)|string|"$geoip_country_code country::*"|
 |[retry-non-idempotent](#retry-non-idempotent)|bool|"false"|
 |[error-log-level](#error-log-level)|string|"notice"|
 |[http2-max-field-size](#http2-max-field-size)|string|"4k"|
@@ -84,9 +80,10 @@ The following table shows a configuration option's name, type, and the default v
 |[ssl-session-timeout](#ssl-session-timeout)|string|"10m"|
 |[ssl-buffer-size](#ssl-buffer-size)|string|"4k"|
 |[use-proxy-protocol](#use-proxy-protocol)|bool|"false"|
+|[proxy-protocol-header-timeout](#proxy-protocol-header-timeout)|string|"5s"|
 |[use-gzip](#use-gzip)|bool|"true"|
 |[use-geoip](#use-geoip)|bool|"true"|
-|[enable-brotli](#enable-brotli)|bool|"true"|
+|[enable-brotli](#enable-brotli)|bool|"false"|
 |[brotli-level](#brotli-level)|int|4|
 |[brotli-types](#brotli-types)|string|"application/xml+rss application/atom+xml application/javascript application/x-javascript application/json application/rss+xml application/vnd.ms-fontobject application/x-font-ttf application/x-web-app-manifest+json application/xhtml+xml application/xml font/opentype image/svg+xml image/x-icon text/css text/plain text/x-component"|
 |[use-http2](#use-http2)|bool|"true"|
@@ -101,11 +98,11 @@ The following table shows a configuration option's name, type, and the default v
 |[limit-conn-zone-variable](#limit-conn-zone-variable)|string|"$binary_remote_addr"|
 |[proxy-stream-timeout](#proxy-stream-timeout)|string|"600s"|
 |[proxy-stream-responses](#proxy-stream-responses)|int|1|
-|[bind-address-ipv4](#bind-address-ipv4)|[]string|""|
-|[bind-address-ipv6](#bind-address-ipv6)|[]string|""|
+|[bind-address](#bind-address)|[]string|""|
 |[forwarded-for-header](#forwarded-for-header)|string|"X-Forwarded-For"|
 |[compute-full-forwarded-for](#compute-full-forwarded-for)|bool|"false"|
 |[proxy-add-original-uri-header](#proxy-add-original-uri-header)|bool|"true"|
+|[generate-request-id](#generate-request-id)|bool|"true"|
 |[enable-opentracing](#enable-opentracing)|bool|"false"|
 |[zipkin-collector-host](#zipkin-collector-host)|string|""|
 |[zipkin-collector-port](#zipkin-collector-port)|int|9411|
@@ -126,8 +123,8 @@ The following table shows a configuration option's name, type, and the default v
 |[proxy-buffer-size](#proxy-buffer-size)|string|"4k"|
 |[proxy-cookie-path](#proxy-cookie-path)|string|"off"|
 |[proxy-cookie-domain](#proxy-cookie-domain)|string|"off"|
-|[proxy-next-upstream](#proxy-next-upstream)|string|"error timeout invalid_header http_502 http_503 http_504"|
-|[proxy-next-upstream-tries](#proxy-next-upstream-tries)|int|0|
+|[proxy-next-upstream](#proxy-next-upstream)|string|"error timeout"|
+|[proxy-next-upstream-tries](#proxy-next-upstream-tries)|int|3|
 |[proxy-redirect-from](#proxy-redirect-from)|string|"off"|
 |[proxy-request-buffering](#proxy-request-buffering)|string|"on"|
 |[ssl-redirect](#ssl-redirect)|bool|"true"|
@@ -238,32 +235,6 @@ Enables underscores in header names. _**default:**_ is disabled
 
 Set if header fields with invalid names should be ignored.
 _**default:**_ is enabled
-
-## enable-vts-status
-
-Allows the replacement of the default status page with a third party module named [nginx-module-vts](https://github.com/vozlt/nginx-module-vts).
-_**default:**_ is disabled
-
-## vts-status-zone-size
-
-Vts config on http level sets parameters for a shared memory zone that will keep states for various keys. The cache is shared between all worker processes. _**default:**_ 10m
-
-_References:_
-[https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_zone](https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_zone)
-
-## vts-default-filter-key
-
-Vts config on http level enables the keys by user defined variable. The key is a key string to calculate traffic. The name is a group string to calculate traffic. The key and name can contain variables such as $host, $server_name. The name's group belongs to filterZones if specified. The key's group belongs to serverZones if not specified second argument name. _**default:**_ $geoip_country_code country::*
-
-_References:_
-[https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_filter_by_set_key](https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_filter_by_set_key)
-
-## vts-sum-key
-
-For metrics keyed (or when using Prometheus, labeled) by server zone, this value is used to indicate metrics for all server zones combined. _**default:**_ *
-
-_References:_
-[https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_display_sum_key](https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_display_sum_key)
 
 ## retry-non-idempotent
 
@@ -479,6 +450,11 @@ _References:_
 
 Enables or disables the [PROXY protocol](https://www.nginx.com/resources/admin-guide/proxy-protocol/) to receive client connection (real IP address) information passed through proxy servers and load balancers such as HAProxy and Amazon Elastic Load Balancer (ELB).
 
+## proxy-protocol-header-timeout
+
+Sets the timeout value for receiving the proxy-protocol headers. The default of 5 seconds prevents the TLS passthrough handler from waiting indefinetly on a dropped connection.
+_**default:**_ 5s
+
 ## use-gzip
 
 Enables or disables compression of HTTP responses using the ["gzip" module](http://nginx.org/en/docs/http/ngx_http_gzip_module.html).
@@ -586,15 +562,9 @@ Sets the number of datagrams expected from the proxied server in response to the
 _References:_
 [http://nginx.org/en/docs/stream/ngx_stream_proxy_module.html#proxy_responses](http://nginx.org/en/docs/stream/ngx_stream_proxy_module.html#proxy_responses)
 
-## bind-address-ipv4
+## bind-address
 
 Sets the addresses on which the server will accept requests instead of *. It should be noted that these addresses must exist in the runtime environment or the controller will crash loop.
-
-
-## bind-address-ipv6
-
-Sets the addresses on which the server will accept requests instead of *. It should be noted that these addresses must exist in the runtime environment or the controller will crash loop.
-
 
 ## forwarded-for-header
 
@@ -607,6 +577,10 @@ Append the remote address to the X-Forwarded-For header instead of replacing it.
 ## proxy-add-original-uri-header
 
 Adds an X-Original-Uri header with the original request URI to the backend request
+
+## generate-request-id 
+
+Ensures that X-Request-ID is defaulted to a random value, if no X-Request-ID is present in the request
 
 ## enable-opentracing
 

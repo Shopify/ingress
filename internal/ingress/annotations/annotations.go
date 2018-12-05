@@ -21,6 +21,7 @@ import (
 	"github.com/imdario/mergo"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/sslcipher"
 
+	apiv1 "k8s.io/api/core/v1"
 	extensions "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -34,6 +35,7 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/annotations/defaultbackend"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/grpc"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/healthcheck"
+	"k8s.io/ingress-nginx/internal/ingress/annotations/influxdb"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/ipwhitelist"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/loadbalancing"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/log"
@@ -52,7 +54,6 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/annotations/sslpassthrough"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/upstreamhashby"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/upstreamvhost"
-	"k8s.io/ingress-nginx/internal/ingress/annotations/vtsfilterkey"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/xforwardedprefix"
 	"k8s.io/ingress-nginx/internal/ingress/errors"
 	"k8s.io/ingress-nginx/internal/ingress/resolver"
@@ -71,7 +72,7 @@ type Ingress struct {
 	ConfigurationSnippet string
 	Connection           connection.Config
 	CorsConfig           cors.Config
-	DefaultBackend       string
+	DefaultBackend       *apiv1.Service
 	Denied               error
 	ExternalAuth         authreq.Config
 	HealthCheck          healthcheck.Config
@@ -88,13 +89,13 @@ type Ingress struct {
 	UpstreamHashBy       string
 	LoadBalancing        string
 	UpstreamVhost        string
-	VtsFilterKey         string
 	Whitelist            ipwhitelist.SourceRange
 	XForwardedPrefix     bool
 	SSLCiphers           string
 	Logs                 log.Config
 	GRPC                 bool
 	LuaRestyWAF          luarestywaf.Config
+	InfluxDB             influxdb.Config
 }
 
 // Extractor defines the annotation parsers to be used in the extraction of annotations
@@ -129,13 +130,13 @@ func NewAnnotationExtractor(cfg resolver.Resolver) Extractor {
 			"UpstreamHashBy":       upstreamhashby.NewParser(cfg),
 			"LoadBalancing":        loadbalancing.NewParser(cfg),
 			"UpstreamVhost":        upstreamvhost.NewParser(cfg),
-			"VtsFilterKey":         vtsfilterkey.NewParser(cfg),
 			"Whitelist":            ipwhitelist.NewParser(cfg),
 			"XForwardedPrefix":     xforwardedprefix.NewParser(cfg),
 			"SSLCiphers":           sslcipher.NewParser(cfg),
 			"Logs":                 log.NewParser(cfg),
 			"GRPC":                 grpc.NewParser(cfg),
 			"LuaRestyWAF":          luarestywaf.NewParser(cfg),
+			"InfluxDB":             influxdb.NewParser(cfg),
 		},
 	}
 }

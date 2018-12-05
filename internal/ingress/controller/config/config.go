@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -159,31 +160,6 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_core_module.html#ignore_invalid_headers
 	// By default this is enabled
 	IgnoreInvalidHeaders bool `json:"ignore-invalid-headers"`
-
-	// EnableVtsStatus allows the replacement of the default status page with a third party module named
-	// nginx-module-vts - https://github.com/vozlt/nginx-module-vts
-	// By default this is disabled
-	EnableVtsStatus bool `json:"enable-vts-status,omitempty"`
-
-	// Vts config on http level
-	// Description: Sets parameters for a shared memory zone that will keep states for various keys. The cache is shared between all worker processe
-	// https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_zone
-	// Default value is 10m
-	VtsStatusZoneSize string `json:"vts-status-zone-size,omitempty"`
-
-	// Vts config on http level
-	// Description: Enables the keys by user defined variable. The key is a key string to calculate traffic.
-	// The name is a group string to calculate traffic. The key and name can contain variables such as $host,
-	// $server_name. The name's group belongs to filterZones if specified. The key's group belongs to serverZones
-	// if not specified second argument name. The example with geoip module is as follows:
-	// https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_filter_by_set_key
-	// Default value is $geoip_country_code country::*
-	VtsDefaultFilterKey string `json:"vts-default-filter-key,omitempty"`
-
-	// Description: Sets sum key used by vts json output, and the sum label in prometheus output.
-	// These indicate metrics values for all server zones combined, rather than for a specific one.
-	// Default value is *
-	VtsSumKey string `json:"vts-sum-key,omitempty"`
 
 	// RetryNonIdempotent since 1.9.13 NGINX will not retry non-idempotent requests (POST, LOCK, PATCH)
 	// in case of an error. The previous behavior can be restored using the value true
@@ -346,6 +322,11 @@ type Configuration struct {
 	// https://www.nginx.com/resources/admin-guide/proxy-protocol/
 	UseProxyProtocol bool `json:"use-proxy-protocol,omitempty"`
 
+	// When use-proxy-protocol is enabled, sets the maximum time the connection handler will wait
+	// to receive proxy headers.
+	// Example '60s'
+	ProxyProtocolHeaderTimeout time.Duration `json:"proxy-protocol-header-timeout,omitempty"`
+
 	// Enables or disables the use of the nginx module that compresses responses using the "gzip" method
 	// http://nginx.org/en/docs/http/ngx_http_gzip_module.html
 	UseGzip bool `json:"use-gzip,omitempty"`
@@ -428,6 +409,10 @@ type Configuration struct {
 	// Append the remote address to the X-Forwarded-For header instead of replacing it
 	// Default: false
 	ComputeFullForwardedFor bool `json:"compute-full-forwarded-for,omitempty"`
+
+	// If the request does not have a request-id, should we generate a random value?
+	// Default: true
+	GenerateRequestId bool `json:"generate-request-id,omitempty"`
 
 	// Adds an X-Original-Uri header with the original request URI to the backend request
 	// Default: true
@@ -516,6 +501,11 @@ type Configuration struct {
 	// DisableLuaRestyWAF disables lua-resty-waf globally regardless
 	// of whether there's an ingress that has enabled the WAF using annotation
 	DisableLuaRestyWAF bool `json:"disable-lua-resty-waf"`
+
+	// EnableInfluxDB enables the nginx InfluxDB extension
+	// http://github.com/influxdata/nginx-influxdb-module/
+	// By default this is disabled
+	EnableInfluxDB bool `json:"enable-influxdb"`
 }
 
 // NewDefault returns the default nginx configuration
@@ -528,6 +518,7 @@ func NewDefault() Configuration {
 	defIPCIDR = append(defIPCIDR, "0.0.0.0/0")
 	defNginxStatusIpv4Whitelist = append(defNginxStatusIpv4Whitelist, "127.0.0.1")
 	defNginxStatusIpv6Whitelist = append(defNginxStatusIpv6Whitelist, "::1")
+	defProxyDeadlineDuration := time.Duration(5) * time.Second
 
 	cfg := Configuration{
 		AllowBackendServerHeader:   false,
@@ -546,6 +537,7 @@ func NewDefault() Configuration {
 		ForwardedForHeader:         "X-Forwarded-For",
 		ComputeFullForwardedFor:    false,
 		ProxyAddOriginalUriHeader:  true,
+		GenerateRequestId:          true,
 		HTTP2MaxFieldSize:          "4k",
 		HTTP2MaxHeaderSize:         "16k",
 		HTTPRedirectCode:           308,
@@ -566,6 +558,7 @@ func NewDefault() Configuration {
 		NginxStatusIpv4Whitelist:   defNginxStatusIpv4Whitelist,
 		NginxStatusIpv6Whitelist:   defNginxStatusIpv6Whitelist,
 		ProxyRealIPCIDR:            defIPCIDR,
+		ProxyProtocolHeaderTimeout: defProxyDeadlineDuration,
 		ServerNameHashMaxSize:      1024,
 		ProxyHeadersHashMaxSize:    512,
 		ProxyHeadersHashBucketSize: 64,
@@ -585,9 +578,6 @@ func NewDefault() Configuration {
 		WorkerProcesses:            strconv.Itoa(runtime.NumCPU()),
 		WorkerShutdownTimeout:      "10s",
 		LoadBalanceAlgorithm:       defaultLoadBalancerAlgorithm,
-		VtsStatusZoneSize:          "10m",
-		VtsDefaultFilterKey:        "$geoip_country_code country::*",
-		VtsSumKey:                  "*",
 		VariablesHashBucketSize:    128,
 		VariablesHashMaxSize:       2048,
 		UseHTTP2:                   true,
@@ -600,10 +590,11 @@ func NewDefault() Configuration {
 			ProxyBufferSize:        "4k",
 			ProxyCookieDomain:      "off",
 			ProxyCookiePath:        "off",
-			ProxyNextUpstream:      "error timeout invalid_header http_502 http_503 http_504",
-			ProxyNextUpstreamTries: 0,
+			ProxyNextUpstream:      "error timeout",
+			ProxyNextUpstreamTries: 3,
 			ProxyRequestBuffering:  "on",
 			ProxyRedirectFrom:      "off",
+			ProxyRedirectTo:        "off",
 			SSLRedirect:            true,
 			CustomHTTPErrors:       []int{},
 			WhitelistSourceRange:   []string{},

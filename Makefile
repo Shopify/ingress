@@ -18,12 +18,19 @@ all: all-container
 BUILDTAGS=
 
 # Use the 0.0 tag for testing, it shouldn't clobber any release builds
-TAG?=0.14.0
+TAG?=0.16.0-rc.5
 REGISTRY?=quay.io/kubernetes-ingress-controller
 GOOS?=linux
 DOCKER?=docker
 SED_I?=sed -i
 GOHOSTOS ?= $(shell go env GOHOSTOS)
+
+# e2e settings
+# Allow limiting the scope of the e2e tests. By default run everything
+FOCUS?=.*
+# number of parallel test
+E2E_NODES?=3
+
 
 ifeq ($(GOHOSTOS),darwin)
   SED_I=sed -i ''
@@ -43,7 +50,7 @@ DUMB_ARCH = ${ARCH}
 
 ALL_ARCH = amd64 arm arm64 ppc64le s390x
 
-QEMUVERSION=v2.9.1-1
+QEMUVERSION=v2.12.0
 
 BUSTED_ARGS=-v --pattern=_test
 
@@ -52,7 +59,7 @@ IMAGE = $(REGISTRY)/$(IMGNAME)
 MULTI_ARCH_IMG = $(IMAGE)-$(ARCH)
 
 # Set default base image dynamically for each arch
-BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):0.44
+BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):0.52
 
 ifeq ($(ARCH),arm)
 	QEMUARCH=arm
@@ -71,7 +78,7 @@ ifeq ($(ARCH),s390x)
     QEMUARCH=s390x
 endif
 
-TEMP_DIR := $(shell mktemp -d)
+TEMP_DIR ?= $(shell mktemp -d)
 
 DOCKERFILE := $(TEMP_DIR)/rootfs/Dockerfile
 
@@ -108,8 +115,6 @@ ifeq ($(ARCH),amd64)
 	$(SED_I) "/CROSS_BUILD_/d" $(DOCKERFILE)
 else
 	# When cross-building, only the placeholder "CROSS_BUILD_" should be removed
-	# Register /usr/bin/qemu-ARCH-static as the handler for ARM binaries in the kernel
-	$(DOCKER) run --rm --privileged multiarch/qemu-user-static:register --reset
 	curl -sSL https://github.com/multiarch/qemu-user-static/releases/download/$(QEMUVERSION)/x86_64_qemu-$(QEMUARCH)-static.tar.gz | tar -xz -C $(TEMP_DIR)/rootfs
 	$(SED_I) "s/CROSS_BUILD_//g" $(DOCKERFILE)
 endif
@@ -120,6 +125,11 @@ ifeq ($(ARCH), amd64)
 	# This is for maintaining backward compatibility
 	$(DOCKER) tag $(MULTI_ARCH_IMG):$(TAG) $(IMAGE):$(TAG)
 endif
+
+.PHONY: register-qemu
+register-qemu:
+	# Register /usr/bin/qemu-ARCH-static as the handler for binaries in multiple platforms
+	$(DOCKER) run --rm --privileged multiarch/qemu-user-static:register --reset
 
 .PHONY: push
 push: .push-$(ARCH)
@@ -135,11 +145,6 @@ endif
 clean:
 	$(DOCKER) rmi -f $(MULTI_ARCH_IMG):$(TAG) || true
 
-.PHONE: code-generator
-code-generator:
-		@go-bindata -version || go get -u github.com/jteeuwen/go-bindata/...
-		go-bindata -nometadata -o internal/file/bindata.go -prefix="rootfs" -pkg=file -ignore=Dockerfile -ignore=".DS_Store" rootfs/...
-
 .PHONY: build
 build: clean
 	CGO_ENABLED=0 GOOS=${GOOS} GOARCH=${GOARCH} go build -a -installsuffix cgo \
@@ -150,6 +155,10 @@ build: clean
 verify-all:
 	@./hack/verify-all.sh
 
+.PHONY: verify-all-verbose
+verify-all:
+	@./hack/verify-all.sh -v	
+
 .PHONY: test
 test:
 	@go test -v -race -tags "$(BUILDTAGS) cgo" $(shell go list ${PKG}/... | grep -v vendor | grep -v '/test/e2e')
@@ -158,21 +167,24 @@ test:
 lua-test:
 	@busted $(BUSTED_ARGS) ./rootfs/etc/nginx/lua/test;
 
-.PHONY: e2e-image
-e2e-image: sub-container-amd64
-	$(DOCKER) tag $(MULTI_ARCH_IMG):$(TAG) $(IMGNAME):e2e
-	docker images
-
 .PHONY: e2e-test
 e2e-test:
 	@ginkgo version || go get -u github.com/onsi/ginkgo/ginkgo
 	@ginkgo build ./test/e2e
-	@KUBECONFIG=${HOME}/.kube/config ginkgo -randomizeSuites -randomizeAllSpecs -flakeAttempts=2 -p -trace -nodes=2 ./test/e2e/e2e.test
+	@KUBECONFIG=${HOME}/.kube/config ginkgo \
+		-randomizeSuites \
+		-randomizeAllSpecs \
+		-flakeAttempts=2 \
+		--focus=$(FOCUS) \
+		-p \
+		-trace \
+		-nodes=$(E2E_NODES) \
+		./test/e2e/e2e.test
 
 .PHONY: cover
 cover:
 	@rm -rf coverage.txt
-	@for d in `go list ./... | grep -v vendor | grep -v '/test/e2e'`; do \
+	@for d in `go list ./... | grep -v vendor | grep -v '/test/e2e' | grep -v 'images/grpc-fortune-teller'`; do \
 		t=$$(date +%s); \
 		go test -coverprofile=cover.out -covermode=atomic $$d || exit 1; \
 		echo "Coverage test $$d took $$(($$(date +%s)-t)) seconds"; \
@@ -211,6 +223,7 @@ dep-ensure:
 	dep version || go get -u github.com/golang/dep/cmd/dep
 	dep ensure -v
 	dep prune -v
+	find vendor -name '*_test.go' -delete
 
 .PHONY: dev-env
 dev-env:

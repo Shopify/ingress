@@ -7,6 +7,7 @@
 
 local resty_lock = require("resty.lock")
 local util = require("util")
+local split = require("util.split")
 
 local DECAY_TIME = 10 -- this value is in seconds
 local LOCK_KEY = ":ewma_key"
@@ -14,7 +15,7 @@ local PICK_SET_SIZE = 2
 
 local ewma_lock = resty_lock:new("locks", {timeout = 0, exptime = 0.1})
 
-local _M = {}
+local _M = { name = "ewma" }
 
 local function lock(upstream)
   local _, err = ewma_lock:lock(upstream .. LOCK_KEY)
@@ -117,25 +118,49 @@ local function pick_and_score(peers, k)
   return peers[lowest_score_index]
 end
 
-function _M.balance(peers)
-  if #peers == 1 then
-    return peers[1]
+function _M.balance(self)
+  local peers = self.peers
+  local endpoint = peers[1]
+
+  if #peers > 1 then
+    local k = (#peers < PICK_SET_SIZE) and #peers or PICK_SET_SIZE
+    local peer_copy = util.deepcopy(peers)
+    endpoint = pick_and_score(peer_copy, k)
   end
-  local k = (#peers < PICK_SET_SIZE) and #peers or PICK_SET_SIZE
-  local peer_copy = util.deepcopy(peers)
-  return pick_and_score(peer_copy, k)
+
+  return endpoint.address, endpoint.port
 end
 
-function _M.after_balance()
-  local response_time = tonumber(util.get_first_value(ngx.var.upstream_response_time)) or 0
-  local connect_time = tonumber(util.get_first_value(ngx.var.upstream_connect_time)) or 0
+function _M.after_balance(_)
+  local response_time = tonumber(split.get_first_value(ngx.var.upstream_response_time)) or 0
+  local connect_time = tonumber(split.get_first_value(ngx.var.upstream_connect_time)) or 0
   local rtt = connect_time + response_time
-  local upstream = util.get_first_value(ngx.var.upstream_addr)
+  local upstream = split.get_first_value(ngx.var.upstream_addr)
 
   if util.is_blank(upstream) then
     return
   end
   get_or_update_ewma(upstream, rtt, true)
+end
+
+function _M.sync(self, backend)
+  local changed = not util.deep_compare(self.peers, backend.endpoints)
+  if not changed then
+    return
+  end
+
+  self.peers = backend.endpoints
+
+  -- TODO: Reset state of EWMA per backend
+  ngx.shared.balancer_ewma:flush_all()
+  ngx.shared.balancer_ewma_last_touched_at:flush_all()
+end
+
+function _M.new(self, backend)
+  local o = { peers = backend.endpoints }
+  setmetatable(o, self)
+  self.__index = self
+  return o
 end
 
 return _M

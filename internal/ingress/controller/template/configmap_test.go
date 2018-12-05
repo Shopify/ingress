@@ -17,7 +17,9 @@ limitations under the License.
 package template
 
 import (
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/kylelemons/godebug/pretty"
 
@@ -28,6 +30,22 @@ func TestFilterErrors(t *testing.T) {
 	e := filterErrors([]int{200, 300, 345, 500, 555, 999})
 	if len(e) != 4 {
 		t.Errorf("expected 4 elements but %v returned", len(e))
+	}
+}
+
+func TestProxytTimeoutParsing(t *testing.T) {
+	testCases := map[string]struct {
+		input  string
+		expect time.Duration // duration in seconds
+	}{
+		"valid duration":   {"35s", time.Duration(35) * time.Second},
+		"invalid duration": {"3zxs", time.Duration(5) * time.Second},
+	}
+	for n, tc := range testCases {
+		cfg := ReadConfig(map[string]string{"proxy-protocol-header-timeout": tc.input})
+		if cfg.ProxyProtocolHeaderTimeout.Seconds() != tc.expect.Seconds() {
+			t.Errorf("Testing %v. Expected %v seconds but got %v seconds", n, tc.expect, cfg.ProxyProtocolHeaderTimeout)
+		}
 	}
 }
 
@@ -73,6 +91,19 @@ func TestMergeConfigMapToStruct(t *testing.T) {
 	to := ReadConfig(conf)
 	if diff := pretty.Compare(to, def); diff != "" {
 		t.Errorf("unexpected diff: (-got +want)\n%s", diff)
+	}
+
+	to = ReadConfig(conf)
+	def.BindAddressIpv4 = []string{}
+	def.BindAddressIpv6 = []string{}
+
+	if !reflect.DeepEqual(to.BindAddressIpv4, []string{"1.1.1.1", "2.2.2.2"}) {
+		t.Errorf("unexpected bindAddressIpv4")
+	}
+
+	if !reflect.DeepEqual(to.BindAddressIpv6, []string{"[2001:db8:a0b:12f0::1]", "[3731:54:65fe:2::a7]"}) {
+		t.Logf("%v", to.BindAddressIpv6)
+		t.Errorf("unexpected bindAddressIpv6")
 	}
 
 	def = config.NewDefault()

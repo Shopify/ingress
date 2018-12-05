@@ -20,28 +20,22 @@ echo "NAMESPACE is set to ${NAMESPACE}"
 test $(minikube status | grep Running | wc -l) -eq 2 && $(minikube status | grep -q 'Correctly Configured') || minikube start
 eval $(minikube docker-env)
 
-echo "[dev-env] installing dependencies"
-dep version || go get -u github.com/golang/dep
-dep ensure
+export TAG=dev
+export REGISTRY=ingress-controller
 
 echo "[dev-env] building container"
-ARCH=amd64 TAG=dev REGISTRY=$USER/ingress-controller make build container
+ARCH=amd64 make build container
 
 echo "[dev-env] installing kubectl"
 kubectl version || brew install kubectl
 
 echo "[dev-env] deploying NGINX Ingress controller in namespace $NAMESPACE"
-cat ./deploy/namespace.yaml                  | kubectl apply --namespace=$NAMESPACE -f -
-cat ./deploy/default-backend.yaml            | kubectl apply --namespace=$NAMESPACE -f -
-cat ./deploy/configmap.yaml                  | kubectl apply --namespace=$NAMESPACE -f -
-cat ./deploy/tcp-services-configmap.yaml     | kubectl apply --namespace=$NAMESPACE -f -
-cat ./deploy/udp-services-configmap.yaml     | kubectl apply --namespace=$NAMESPACE -f -
-cat ./deploy/rbac.yaml                       | kubectl apply --namespace=$NAMESPACE -f -
-cat ./deploy/with-rbac.yaml                  | kubectl apply --namespace=$NAMESPACE -f -
+cat ./deploy/mandatory.yaml                            | kubectl apply --namespace=$NAMESPACE -f -
+cat ./deploy/provider/baremetal/service-nodeport.yaml  | kubectl apply --namespace=$NAMESPACE -f -
 
 echo "updating image..."
 kubectl set image \
     deployments \
     --namespace ingress-nginx \
     --selector app=ingress-nginx \
-    nginx-ingress-controller=index.docker.io/$USER/ingress-controller/nginx-ingress-controller:dev
+    nginx-ingress-controller=${REGISTRY}/nginx-ingress-controller:${TAG}

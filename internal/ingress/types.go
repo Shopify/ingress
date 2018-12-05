@@ -28,6 +28,7 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/annotations/authtls"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/connection"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/cors"
+	"k8s.io/ingress-nginx/internal/ingress/annotations/influxdb"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/ipwhitelist"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/log"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/luarestywaf"
@@ -241,10 +242,6 @@ type Location struct {
 	// UsePortInRedirects indicates if redirects must specify the port
 	// +optional
 	UsePortInRedirects bool `json:"usePortInRedirects"`
-	// VtsFilterKey contains the vts filter key on the location level
-	// https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_filter_by_set_key
-	// +optional
-	VtsFilterKey string `json:"vtsFilterKey,omitempty"`
 	// ConfigurationSnippet contains additional configuration for the backend
 	// to be considered in the configuration of the location
 	ConfigurationSnippet string `json:"configurationSnippet"`
@@ -271,6 +268,9 @@ type Location struct {
 	GRPC bool `json:"grpc"`
 	// LuaRestyWAF contains parameters to configure lua-resty-waf
 	LuaRestyWAF luarestywaf.Config `json:"luaRestyWAF"`
+	// InfluxDB allows to monitor the incoming request by sending them to an influxdb database
+	// +optional
+	InfluxDB influxdb.Config `json:"influxDB,omitempty"`
 }
 
 // SSLPassthroughBackend describes a SSL upstream server configured

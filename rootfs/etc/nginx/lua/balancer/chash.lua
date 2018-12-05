@@ -1,48 +1,22 @@
+local balancer_resty = require("balancer.resty")
 local resty_chash = require("resty.chash")
 local util = require("util")
-local string_sub = string.sub
+local split = require("util.split")
 
-local _M = {}
-local instances = {}
+local _M = balancer_resty:new({ factory = resty_chash, name = "chash" })
 
--- given an Nginx variable i.e $request_uri
--- it returns value of ngx.var[request_uri]
-local function get_lua_ngx_var(ngx_var)
-  local var_name = string_sub(ngx_var, 2)
-  return ngx.var[var_name]
+function _M.new(self, backend)
+  local nodes = util.get_nodes(backend.endpoints)
+  local o = { instance = self.factory:new(nodes), hash_by = backend["upstream-hash-by"] }
+  setmetatable(o, self)
+  self.__index = self
+  return o
 end
 
-function _M.balance(backend)
-  local instance = instances[backend.name]
-  if not instance then
-    return nil
-  end
-
-  local key = get_lua_ngx_var(backend["upstream-hash-by"])
-  local endpoint_string = instance:find(key)
-
-  local address, port = util.split_pair(endpoint_string, ":")
-  return { address = address, port = port }
-end
-
-function _M.reinit(backend)
-  local instance = instances[backend.name]
-
-  local nodes = {}
-  -- we don't support weighted consistent hashing
-  local weight = 1
-
-  for _, endpoint in pairs(backend.endpoints) do
-    local endpoint_string = endpoint.address .. ":" .. endpoint.port
-    nodes[endpoint_string] = weight
-  end
-
-  if instance then
-    instance:reinit(nodes)
-  else
-    instance = resty_chash:new(nodes)
-    instances[backend.name] = instance
-  end
+function _M.balance(self)
+  local key = util.lua_ngx_var(self.hash_by)
+  local endpoint_string = self.instance:find(key)
+  return split.split_pair(endpoint_string, ":")
 end
 
 return _M
