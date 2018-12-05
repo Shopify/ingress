@@ -32,6 +32,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
+	"k8s.io/ingress-nginx/internal/file"
 )
 
 const (
@@ -50,26 +51,30 @@ func log(level string, format string, args ...interface{}) {
 	fmt.Fprintf(GinkgoWriter, nowStamp()+": "+level+": "+format+"\n", args...)
 }
 
+// Logf logs to the INFO logs.
 func Logf(format string, args ...interface{}) {
 	log("INFO", format, args...)
 }
 
+// Failf logs to the INFO logs and fails the test.
 func Failf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	log("INFO", msg)
 	Fail(nowStamp()+": "+msg, 1)
 }
 
+// Skipf logs to the INFO logs and skips the test.
 func Skipf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	log("INFO", msg)
 	Skip(nowStamp() + ": " + msg)
 }
 
+// RestclientConfig deserializes the contents of a kubeconfig file into a Config object.
 func RestclientConfig(config, context string) (*api.Config, error) {
 	Logf(">>> config: %s\n", config)
 	if config == "" {
-		return nil, fmt.Errorf("Config file must be specified to load client config")
+		return nil, fmt.Errorf("config file must be specified to load client config")
 	}
 	c, err := clientcmd.LoadFromFile(config)
 	if err != nil {
@@ -82,8 +87,7 @@ func RestclientConfig(config, context string) (*api.Config, error) {
 	return c, nil
 }
 
-type ClientConfigGetter func() (*rest.Config, error)
-
+// LoadConfig deserializes the contents of a kubeconfig file into a REST configuration.
 func LoadConfig(config, context string) (*rest.Config, error) {
 	c, err := RestclientConfig(config, context)
 	if err != nil {
@@ -96,10 +100,11 @@ func LoadConfig(config, context string) (*rest.Config, error) {
 var RunID = uuid.NewUUID()
 
 // CreateKubeNamespace creates a new namespace in the cluster
-func CreateKubeNamespace(baseName string, c kubernetes.Interface) (*v1.Namespace, error) {
+func CreateKubeNamespace(baseName string, c kubernetes.Interface) (string, error) {
+	ts := time.Now().UnixNano()
 	ns := &v1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: fmt.Sprintf("e2e-tests-%v-", baseName),
+			GenerateName: fmt.Sprintf("e2e-tests-%v-%v-", baseName, ts),
 		},
 	}
 	// Be robust about making the namespace creation call.
@@ -115,9 +120,9 @@ func CreateKubeNamespace(baseName string, c kubernetes.Interface) (*v1.Namespace
 		return true, nil
 	})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return got, nil
+	return got.Name, nil
 }
 
 // DeleteKubeNamespace deletes a namespace and all the objects inside
@@ -125,6 +130,7 @@ func DeleteKubeNamespace(c kubernetes.Interface, namespace string) error {
 	return c.CoreV1().Namespaces().Delete(namespace, metav1.NewDeleteOptions(0))
 }
 
+// ExpectNoError tests whether an error occurred.
 func ExpectNoError(err error, explain ...interface{}) {
 	if err != nil {
 		Logf("Unexpected error occurred: %v", err)
@@ -134,7 +140,7 @@ func ExpectNoError(err error, explain ...interface{}) {
 
 // WaitForKubeNamespaceNotExist waits until a namespaces is not present in the cluster
 func WaitForKubeNamespaceNotExist(c kubernetes.Interface, namespace string) error {
-	return wait.PollImmediate(Poll, time.Minute*2, namespaceNotExist(c, namespace))
+	return wait.PollImmediate(Poll, time.Minute*5, namespaceNotExist(c, namespace))
 }
 
 func namespaceNotExist(c kubernetes.Interface, namespace string) wait.ConditionFunc {
@@ -152,7 +158,7 @@ func namespaceNotExist(c kubernetes.Interface, namespace string) wait.ConditionF
 
 // WaitForNoPodsInNamespace waits until there are no pods running in a namespace
 func WaitForNoPodsInNamespace(c kubernetes.Interface, namespace string) error {
-	return wait.PollImmediate(Poll, time.Minute*2, noPodsInNamespace(c, namespace))
+	return wait.PollImmediate(Poll, time.Minute*5, noPodsInNamespace(c, namespace))
 }
 
 func noPodsInNamespace(c kubernetes.Interface, namespace string) wait.ConditionFunc {
@@ -204,6 +210,30 @@ func secretInNamespace(c kubernetes.Interface, namespace, name string) wait.Cond
 			return true, nil
 		}
 		return false, nil
+	}
+}
+
+// WaitForFileInFS waits a default amount of time for the specified file is present in the filesystem
+func WaitForFileInFS(file string, fs file.Filesystem) error {
+	return wait.PollImmediate(1*time.Second, time.Minute*2, fileInFS(file, fs))
+}
+
+func fileInFS(file string, fs file.Filesystem) wait.ConditionFunc {
+	return func() (bool, error) {
+		stat, err := fs.Stat(file)
+		if err != nil {
+			return false, err
+		}
+
+		if stat == nil {
+			return false, fmt.Errorf("file %v does not exist", file)
+		}
+
+		if stat.Size() > 0 {
+			return true, nil
+		}
+
+		return false, fmt.Errorf("the file %v exists but it is empty", file)
 	}
 }
 

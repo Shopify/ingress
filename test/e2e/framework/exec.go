@@ -31,11 +31,7 @@ func (f *Framework) ExecCommand(pod *v1.Pod, command string) (string, error) {
 		execErr bytes.Buffer
 	)
 
-	if len(pod.Spec.Containers) != 1 {
-		return "", fmt.Errorf("could not determine which container to use")
-	}
-
-	args := fmt.Sprintf("kubectl exec -n %v %v -- %v", pod.Namespace, pod.Name, command)
+	args := fmt.Sprintf("kubectl exec --namespace %v %v --container nginx-ingress-controller -- %v", pod.Namespace, pod.Name, command)
 	cmd := exec.Command("/bin/bash", "-c", args)
 	cmd.Stdout = &execOut
 	cmd.Stderr = &execErr
@@ -50,4 +46,15 @@ func (f *Framework) ExecCommand(pod *v1.Pod, command string) (string, error) {
 	}
 
 	return execOut.String(), nil
+}
+
+// NewIngressController deploys a new NGINX Ingress controller in a namespace
+func (f *Framework) NewIngressController(namespace string) error {
+	cmd := exec.Command("./wait-for-nginx.sh", namespace)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("Unexpected error waiting for ingress controller deployment: %v.\nLogs:\n%v", err, string(out))
+	}
+
+	return nil
 }

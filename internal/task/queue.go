@@ -22,6 +22,7 @@ import (
 
 	"github.com/golang/glog"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -42,31 +43,47 @@ type Queue struct {
 	sync func(interface{}) error
 	// workerDone is closed when the worker exits
 	workerDone chan bool
-
+	// fn makes a key for an API object
 	fn func(obj interface{}) (interface{}, error)
-
+	// lastSync is the Unix epoch time of the last execution of 'sync'
 	lastSync int64
 }
 
 // Element represents one item of the queue
 type Element struct {
-	Key       interface{}
-	Timestamp int64
+	Key         interface{}
+	Timestamp   int64
+	IsSkippable bool
 }
 
-// Run ...
+// Run starts processing elements in the queue
 func (t *Queue) Run(period time.Duration, stopCh <-chan struct{}) {
 	wait.Until(t.worker, period, stopCh)
 }
 
-// Enqueue enqueues ns/name of the given api object in the task queue.
-func (t *Queue) Enqueue(obj interface{}) {
+// EnqueueTask enqueues ns/name of the given api object in the task queue.
+func (t *Queue) EnqueueTask(obj interface{}) {
+	t.enqueue(obj, false)
+}
+
+// EnqueueSkippableTask enqueues ns/name of the given api object in
+// the task queue that can be skipped
+func (t *Queue) EnqueueSkippableTask(obj interface{}) {
+	t.enqueue(obj, true)
+}
+
+// enqueue enqueues ns/name of the given api object in the task queue.
+func (t *Queue) enqueue(obj interface{}, skippable bool) {
 	if t.IsShuttingDown() {
 		glog.Errorf("queue has been shutdown, failed to enqueue: %v", obj)
 		return
 	}
 
 	ts := time.Now().UnixNano()
+	if !skippable {
+		// make sure the timestamp is bigger than lastSync
+		ts = time.Now().Add(24 * time.Hour).UnixNano()
+	}
 	glog.V(3).Infof("queuing item %v", obj)
 	key, err := t.fn(obj)
 	if err != nil {
@@ -165,4 +182,11 @@ func NewCustomTaskQueue(syncFn func(interface{}) error, fn func(interface{}) (in
 	}
 
 	return q
+}
+
+// GetDummyObject returns a valid object that can be used in the Queue
+func GetDummyObject(name string) *metav1.ObjectMeta {
+	return &metav1.ObjectMeta{
+		Name: name,
+	}
 }

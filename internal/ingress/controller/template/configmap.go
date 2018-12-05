@@ -21,27 +21,39 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/golang/glog"
 
+	"github.com/mitchellh/hashstructure"
 	"github.com/mitchellh/mapstructure"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/ingress-nginx/internal/ingress/controller/config"
 	ing_net "k8s.io/ingress-nginx/internal/net"
+	"k8s.io/ingress-nginx/internal/runtime"
 )
 
 const (
-	customHTTPErrors     = "custom-http-errors"
-	skipAccessLogUrls    = "skip-access-log-urls"
-	whitelistSourceRange = "whitelist-source-range"
-	proxyRealIPCIDR      = "proxy-real-ip-cidr"
-	bindAddress          = "bind-address"
-	httpRedirectCode     = "http-redirect-code"
-	proxyStreamResponses = "proxy-stream-responses"
+	customHTTPErrors         = "custom-http-errors"
+	skipAccessLogUrls        = "skip-access-log-urls"
+	whitelistSourceRange     = "whitelist-source-range"
+	proxyRealIPCIDR          = "proxy-real-ip-cidr"
+	bindAddress              = "bind-address"
+	httpRedirectCode         = "http-redirect-code"
+	blockCIDRs               = "block-cidrs"
+	blockUserAgents          = "block-user-agents"
+	blockReferers            = "block-referers"
+	proxyStreamResponses     = "proxy-stream-responses"
+	hideHeaders              = "hide-headers"
+	nginxStatusIpv4Whitelist = "nginx-status-ipv4-whitelist"
+	nginxStatusIpv6Whitelist = "nginx-status-ipv6-whitelist"
+	proxyHeaderTimeout       = "proxy-protocol-header-timeout"
+	workerProcesses          = "worker-processes"
 )
 
 var (
-	validRedirectCodes = []int{301, 302, 307, 308}
+	validRedirectCodes = sets.NewInt([]int{301, 302, 307, 308}...)
 )
 
 // ReadConfig obtains the configuration defined by the user merged with the defaults.
@@ -52,13 +64,19 @@ func ReadConfig(src map[string]string) config.Configuration {
 		conf[k] = v
 	}
 
+	to := config.NewDefault()
 	errors := make([]int, 0)
 	skipUrls := make([]string, 0)
-	whitelist := make([]string, 0)
-	proxylist := make([]string, 0)
+	whiteList := make([]string, 0)
+	proxyList := make([]string, 0)
+	hideHeadersList := make([]string, 0)
+
 	bindAddressIpv4List := make([]string, 0)
 	bindAddressIpv6List := make([]string, 0)
-	redirectCode := 308
+
+	blockCIDRList := make([]string, 0)
+	blockUserAgentList := make([]string, 0)
+	blockRefererList := make([]string, 0)
 
 	if val, ok := conf[customHTTPErrors]; ok {
 		delete(conf, customHTTPErrors)
@@ -71,19 +89,23 @@ func ReadConfig(src map[string]string) config.Configuration {
 			}
 		}
 	}
+	if val, ok := conf[hideHeaders]; ok {
+		delete(conf, hideHeaders)
+		hideHeadersList = strings.Split(val, ",")
+	}
 	if val, ok := conf[skipAccessLogUrls]; ok {
 		delete(conf, skipAccessLogUrls)
 		skipUrls = strings.Split(val, ",")
 	}
 	if val, ok := conf[whitelistSourceRange]; ok {
 		delete(conf, whitelistSourceRange)
-		whitelist = append(whitelist, strings.Split(val, ",")...)
+		whiteList = append(whiteList, strings.Split(val, ",")...)
 	}
 	if val, ok := conf[proxyRealIPCIDR]; ok {
 		delete(conf, proxyRealIPCIDR)
-		proxylist = append(proxylist, strings.Split(val, ",")...)
+		proxyList = append(proxyList, strings.Split(val, ",")...)
 	} else {
-		proxylist = append(proxylist, "0.0.0.0/0")
+		proxyList = append(proxyList, "0.0.0.0/0")
 	}
 	if val, ok := conf[bindAddress]; ok {
 		delete(conf, bindAddress)
@@ -101,17 +123,41 @@ func ReadConfig(src map[string]string) config.Configuration {
 		}
 	}
 
+	if val, ok := conf[blockCIDRs]; ok {
+		delete(conf, blockCIDRs)
+		blockCIDRList = strings.Split(val, ",")
+	}
+	if val, ok := conf[blockUserAgents]; ok {
+		delete(conf, blockUserAgents)
+		blockUserAgentList = strings.Split(val, ",")
+	}
+	if val, ok := conf[blockReferers]; ok {
+		delete(conf, blockReferers)
+		blockRefererList = strings.Split(val, ",")
+	}
+
 	if val, ok := conf[httpRedirectCode]; ok {
 		delete(conf, httpRedirectCode)
 		j, err := strconv.Atoi(val)
 		if err != nil {
 			glog.Warningf("%v is not a valid HTTP code: %v", val, err)
 		} else {
-			if intInSlice(j, validRedirectCodes) {
-				redirectCode = j
+			if validRedirectCodes.Has(j) {
+				to.HTTPRedirectCode = j
 			} else {
 				glog.Warningf("The code %v is not a valid as HTTP redirect code. Using the default.", val)
 			}
+		}
+	}
+
+	// Verify that the configured timeout is parsable as a duration. if not, set the default value
+	if val, ok := conf[proxyHeaderTimeout]; ok {
+		delete(conf, proxyHeaderTimeout)
+		duration, err := time.ParseDuration(val)
+		if err != nil {
+			glog.Warningf("proxy-protocol-header-timeout of %v encountered an error while being parsed %v. Switching to use default value instead.", val, err)
+		} else {
+			to.ProxyProtocolHeaderTimeout = duration
 		}
 	}
 
@@ -126,15 +172,44 @@ func ReadConfig(src map[string]string) config.Configuration {
 		}
 	}
 
-	to := config.NewDefault()
+	// Nginx Status whitlelist
+	if val, ok := conf[nginxStatusIpv4Whitelist]; ok {
+		whitelist := make([]string, 0)
+		whitelist = append(whitelist, strings.Split(val, ",")...)
+		to.NginxStatusIpv4Whitelist = whitelist
+
+		delete(conf, nginxStatusIpv4Whitelist)
+	}
+	if val, ok := conf[nginxStatusIpv6Whitelist]; ok {
+		whitelist := make([]string, 0)
+		whitelist = append(whitelist, strings.Split(val, ",")...)
+		to.NginxStatusIpv6Whitelist = whitelist
+
+		delete(conf, nginxStatusIpv6Whitelist)
+	}
+
+	if val, ok := conf[workerProcesses]; ok {
+		to.WorkerProcesses = val
+
+		if val == "auto" {
+			to.WorkerProcesses = strconv.Itoa(runtime.NumCPU())
+		}
+
+		delete(conf, workerProcesses)
+	}
+
 	to.CustomHTTPErrors = filterErrors(errors)
 	to.SkipAccessLogURLs = skipUrls
-	to.WhitelistSourceRange = whitelist
-	to.ProxyRealIPCIDR = proxylist
+	to.WhitelistSourceRange = whiteList
+	to.ProxyRealIPCIDR = proxyList
 	to.BindAddressIpv4 = bindAddressIpv4List
 	to.BindAddressIpv6 = bindAddressIpv6List
-	to.HTTPRedirectCode = redirectCode
+	to.BlockCIDRs = blockCIDRList
+	to.BlockUserAgents = blockUserAgentList
+	to.BlockReferers = blockRefererList
+	to.HideHeaders = hideHeadersList
 	to.ProxyStreamResponses = streamResponses
+	to.DisableIpv6DNS = !ing_net.IsIPv6Enabled()
 
 	config := &mapstructure.DecoderConfig{
 		Metadata:         nil,
@@ -152,6 +227,15 @@ func ReadConfig(src map[string]string) config.Configuration {
 		glog.Warningf("unexpected error merging defaults: %v", err)
 	}
 
+	hash, err := hashstructure.Hash(to, &hashstructure.HashOptions{
+		TagName: "json",
+	})
+	if err != nil {
+		glog.Warningf("unexpected error obtaining hash: %v", err)
+	}
+
+	to.Checksum = fmt.Sprintf("%v", hash)
+
 	return to
 }
 
@@ -166,13 +250,4 @@ func filterErrors(codes []int) []int {
 	}
 
 	return fa
-}
-
-func intInSlice(i int, list []int) bool {
-	for _, v := range list {
-		if v == i {
-			return true
-		}
-	}
-	return false
 }

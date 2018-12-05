@@ -4,9 +4,9 @@ This example demonstrates how to use the Rewrite annotations
 
 ## Prerequisites
 
-You will need to make sure you Ingress targets exactly one Ingress
-controller by specifying the [ingress.class annotation](/examples/PREREQUISITES.md#ingress-class),
-and that you have an ingress controller [running](/examples/deployment) in your cluster.
+You will need to make sure your Ingress targets exactly one Ingress
+controller by specifying the [ingress.class annotation](../../user-guide/multiple-ingress.md),
+and that you have an ingress controller [running](../../deploy) in your cluster.
 
 ## Deployment
 
@@ -19,7 +19,8 @@ Rewriting can be controlled using the following annotations:
 |nginx.ingress.kubernetes.io/base-url-scheme|Override for the scheme passed to the base tag|string|
 |nginx.ingress.kubernetes.io/ssl-redirect|Indicates if the location section is accessible SSL only (defaults to True when Ingress contains a Certificate)|bool|
 |nginx.ingress.kubernetes.io/force-ssl-redirect|Forces the redirection to HTTPS even if the Ingress is not TLS Enabled|bool|
-|nginx.ingress.kubernetes.io/app-root|Defines the Application Root that the Controller must redirect if it's not in '/' context|string|
+|nginx.ingress.kubernetes.io/app-root|Defines the Application Root that the Controller must redirect if it's in '/' context|string|
+|nginx.ingress.kubernetes.io/use-regex|Indicates if the paths defined on an Ingress use regular expressions|bool|
 
 ## Validation
 

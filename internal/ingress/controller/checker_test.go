@@ -27,6 +27,7 @@ import (
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/kubernetes/pkg/util/filesystem"
 
+	"k8s.io/ingress-nginx/internal/file"
 	ngx_config "k8s.io/ingress-nginx/internal/ingress/controller/config"
 )
 
@@ -55,20 +56,20 @@ func TestNginxCheck(t *testing.T) {
 
 	t.Run("no pid or process", func(t *testing.T) {
 		if err := callHealthz(true, mux); err == nil {
-			t.Errorf("expected an error but none returned")
+			t.Error("expected an error but none returned")
 		}
 	})
 
-	// create required files
-	fs.MkdirAll("/run", 0655)
-	pidFile, err := fs.Create("/run/nginx.pid")
+	// create pid file
+	fs.MkdirAll("/tmp", file.ReadWriteByUser)
+	pidFile, err := fs.Create(nginxPID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	t.Run("no process", func(t *testing.T) {
 		if err := callHealthz(true, mux); err == nil {
-			t.Errorf("expected an error but none returned")
+			t.Error("expected an error but none returned")
 		}
 	})
 
@@ -92,23 +93,20 @@ func TestNginxCheck(t *testing.T) {
 		}
 	})
 
-	pidFile, err = fs.Create("/run/nginx.pid")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	pidFile.Write([]byte(fmt.Sprintf("%v", pid)))
+	// pollute pid file
+	pidFile.Write([]byte(fmt.Sprint("999999")))
 	pidFile.Close()
 
-	t.Run("valid request", func(t *testing.T) {
+	t.Run("bad pid", func(t *testing.T) {
 		if err := callHealthz(true, mux); err == nil {
-			t.Errorf("expected an error but none returned")
+			t.Error("expected an error but none returned")
 		}
 	})
 
 	t.Run("invalid port", func(t *testing.T) {
 		n.cfg.ListenPorts.Status = 9000
 		if err := callHealthz(true, mux); err == nil {
-			t.Errorf("expected an error but none returned")
+			t.Error("expected an error but none returned")
 		}
 	})
 }

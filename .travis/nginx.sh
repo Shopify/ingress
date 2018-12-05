@@ -14,13 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -x
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 source $DIR/common.sh
 
 IMAGE=$(make -s -C $DIR/../images/nginx image-info)
 
-if docker_tag_exists "kubernetes-ingress-controller/nginx" $(echo $IMAGE | jq .tag) "$ARCH"; then
+if docker_tag_exists "shopify/nginx" $(echo $IMAGE | jq .tag) "$ARCH"; then
     echo "Image already published"
     exit 0
 fi

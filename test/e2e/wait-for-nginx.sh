@@ -14,48 +14,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-export JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
+set -e
 
-echo "deploying NGINX Ingress controller"
-cat deploy/namespace.yaml | kubectl apply -f -
-cat deploy/default-backend.yaml | kubectl apply -f -
-cat deploy/configmap.yaml | kubectl apply -f -
-cat deploy/tcp-services-configmap.yaml | kubectl apply -f -
-cat deploy/udp-services-configmap.yaml | kubectl apply -f -
-cat deploy/without-rbac.yaml | kubectl apply -f -
-cat deploy/provider/baremetal/service-nodeport.yaml | kubectl apply -f -
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-echo "updating image..."
-kubectl set image \
-    deployments \
-    --namespace ingress-nginx \
-	--selector app=ingress-nginx \
-    nginx-ingress-controller=quay.io/kubernetes-ingress-controller/nginx-ingress-controller:test
+export NAMESPACE=$1
 
-sleep 5
+echo "deploying NGINX Ingress controller in namespace $NAMESPACE"
 
-echo "waiting NGINX ingress pod..."
+function on_exit {
+    local error_code="$?"
 
-function waitForPod() {
-    until kubectl get pods -n ingress-nginx -l app=ingress-nginx -o jsonpath="$JSONPATH" 2>&1 | grep -q "Ready=True";
-    do
-        sleep 1;
-    done
+    test $error_code == 0 && return;
+
+    echo "Obtaining ingress controller pod logs..."
+    kubectl logs -l app.kubernetes.io/name=ingress-nginx -n $NAMESPACE
 }
+trap on_exit EXIT
 
-export -f waitForPod
+sed "s@\${NAMESPACE}@${NAMESPACE}@" $DIR/../manifests/ingress-controller/mandatory.yaml | kubectl apply --namespace=$NAMESPACE -f -
+cat $DIR/../manifests/ingress-controller/service-nodeport.yaml | kubectl apply --namespace=$NAMESPACE -f -
 
-timeout 10s bash -c waitForPod
-
-if kubectl get pods -n ingress-nginx -l app=ingress-nginx -o jsonpath="$JSONPATH" 2>&1 | grep -q "Ready=True";
-then
-    echo "Kubernetes deployments started"
-else
-    echo "Kubernetes deployments with issues:"
-    kubectl get pods -n ingress-nginx
-
-    echo "Reason:"
-    kubectl describe pods -n ingress-nginx
-    kubectl logs -n ingress-nginx -l app=ingress-nginx
-    exit 1
-fi
+# wait for the deployment and fail if there is an error before starting the execution of any test
+kubectl rollout status \
+    --request-timeout=3m \
+    --namespace $NAMESPACE \
+    deployment nginx-ingress-controller

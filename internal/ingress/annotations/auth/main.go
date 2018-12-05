@@ -19,8 +19,6 @@ package auth
 import (
 	"fmt"
 	"io/ioutil"
-	"os"
-	"path"
 	"regexp"
 
 	"github.com/pkg/errors"
@@ -47,6 +45,7 @@ type Config struct {
 	File    string `json:"file"`
 	Secured bool   `json:"secured"`
 	FileSHA string `json:"fileSha"`
+	Secret  string `json:"secret"`
 }
 
 // Equal tests for equality between two Config types
@@ -72,7 +71,9 @@ func (bd1 *Config) Equal(bd2 *Config) bool {
 	if bd1.FileSHA != bd2.FileSHA {
 		return false
 	}
-
+	if bd1.Secret != bd2.Secret {
+		return false
+	}
 	return true
 }
 
@@ -83,17 +84,6 @@ type auth struct {
 
 // NewParser creates a new authentication annotation parser
 func NewParser(authDirectory string, r resolver.Resolver) parser.IngressAnnotation {
-	os.MkdirAll(authDirectory, 0755)
-
-	currPath := authDirectory
-	for currPath != "/" {
-		currPath = path.Dir(currPath)
-		err := os.Chmod(currPath, 0755)
-		if err != nil {
-			break
-		}
-	}
-
 	return auth{r, authDirectory}
 }
 
@@ -140,6 +130,7 @@ func (a auth) Parse(ing *extensions.Ingress) (interface{}, error) {
 		File:    passFile,
 		Secured: true,
 		FileSHA: file.SHA1(passFile),
+		Secret:  name,
 	}, nil
 }
 
@@ -153,8 +144,7 @@ func dumpSecret(filename string, secret *api.Secret) error {
 		}
 	}
 
-	// TODO: check permissions required
-	err := ioutil.WriteFile(filename, val, 0777)
+	err := ioutil.WriteFile(filename, val, file.ReadWriteByUser)
 	if err != nil {
 		return ing_errors.LocationDenied{
 			Reason: errors.Wrap(err, "unexpected error creating password file"),

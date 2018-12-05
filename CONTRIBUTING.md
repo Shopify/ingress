@@ -1,6 +1,6 @@
 # Contributing Guidelines
 
-Read the following guide if you're interested in contributing to Ingress.
+Read the following guide if you're interested in contributing to Ingress. [Make Ingress-Nginx Work for you, and the Community](https://youtu.be/GDm-7BlmPPg) from KubeCon Europe 2018 is a great video to get you started!!
 
 ## Contributor License Agreements
 
@@ -38,6 +38,6 @@ Whether you are a user or contributor, official support channels include:
 
 - GitHub issues: https://github.com/kubernetes/ingress-nginx/issues/new
 - Slack: kubernetes-users room in the [Kubernetes Slack](http://slack.kubernetes.io/)
-- Email: [kubernetes-users](https://groups.google.com/forum/#!forum/kubernetes-users) mailing list
+- Post: [Kubernetes Forum](https://discuss.kubernetes.io)
 
 Before opening a new issue or submitting a new pull request, it's helpful to search the project - it's likely that another user has already reported the issue you're facing, or it's a known issue that we're already aware of.

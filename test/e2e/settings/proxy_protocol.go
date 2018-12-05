@@ -14,29 +14,31 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package setting
+package settings
 
 import (
 	"fmt"
 	"io/ioutil"
 	"net"
+	"strconv"
 	"strings"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	"k8s.io/api/extensions/v1beta1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/ingress-nginx/test/e2e/framework"
 )
 
 var _ = framework.IngressNginxDescribe("Proxy Protocol", func() {
 	f := framework.NewDefaultFramework("proxy-protocol")
 
+	setting := "use-proxy-protocol"
+
 	BeforeEach(func() {
 		err := f.NewEchoDeployment()
+		Expect(err).NotTo(HaveOccurred())
+
+		err = f.UpdateNginxConfigMapData(setting, "false")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -46,38 +48,10 @@ var _ = framework.IngressNginxDescribe("Proxy Protocol", func() {
 	It("should respect port passed by the PROXY Protocol", func() {
 		host := "proxy-protocol"
 
-		setting := "use-proxy-protocol"
-		updateConfigmap(setting, "true", f.KubeClientSet)
-		defer updateConfigmap(setting, "false", f.KubeClientSet)
+		err := f.UpdateNginxConfigMapData(setting, "true")
+		Expect(err).NotTo(HaveOccurred())
 
-		ing, err := f.EnsureIngress(&v1beta1.Ingress{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:        host,
-				Namespace:   f.Namespace.Name,
-				Annotations: map[string]string{},
-			},
-			Spec: v1beta1.IngressSpec{
-				Rules: []v1beta1.IngressRule{
-					{
-						Host: host,
-						IngressRuleValue: v1beta1.IngressRuleValue{
-							HTTP: &v1beta1.HTTPIngressRuleValue{
-								Paths: []v1beta1.HTTPIngressPath{
-									{
-										Path: "/",
-										Backend: v1beta1.IngressBackend{
-											ServiceName: "http-svc",
-											ServicePort: intstr.FromInt(80),
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		})
-
+		ing, err := f.EnsureIngress(framework.NewSingleIngress(host, "/", host, f.IngressController.Namespace, "http-svc", 80, nil))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ing).NotTo(BeNil())
 
@@ -93,7 +67,7 @@ var _ = framework.IngressNginxDescribe("Proxy Protocol", func() {
 		port, err := f.GetNginxPort("http")
 		Expect(err).NotTo(HaveOccurred())
 
-		conn, err := net.Dial("tcp", fmt.Sprintf("%v:%v", ip, port))
+		conn, err := net.Dial("tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 		Expect(err).NotTo(HaveOccurred())
 		defer conn.Close()
 
@@ -109,22 +83,3 @@ var _ = framework.IngressNginxDescribe("Proxy Protocol", func() {
 		Expect(body).Should(ContainSubstring(fmt.Sprintf("x-forwarded-for=192.168.0.1")))
 	})
 })
-
-func updateConfigmap(k, v string, c kubernetes.Interface) {
-	By(fmt.Sprintf("updating configuration configmap setting %v to '%v'", k, v))
-	config, err := c.CoreV1().ConfigMaps("ingress-nginx").Get("nginx-configuration", metav1.GetOptions{})
-	Expect(err).NotTo(HaveOccurred())
-	Expect(config).NotTo(BeNil())
-
-	if config.Data == nil {
-		config.Data = map[string]string{}
-	}
-
-	if config.Data[k] == v {
-		return
-	}
-
-	config.Data[k] = v
-	_, err = c.CoreV1().ConfigMaps("ingress-nginx").Update(config)
-	Expect(err).NotTo(HaveOccurred())
-}

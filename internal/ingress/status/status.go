@@ -40,8 +40,6 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/kubelet/util/sliceutils"
 
-	"k8s.io/ingress-nginx/internal/ingress/annotations/class"
-	"k8s.io/ingress-nginx/internal/ingress/store"
 	"k8s.io/ingress-nginx/internal/k8s"
 	"k8s.io/ingress-nginx/internal/task"
 )
@@ -52,8 +50,13 @@ const (
 
 // Sync ...
 type Sync interface {
-	Run(stopCh <-chan struct{})
+	Run()
 	Shutdown()
+}
+
+type ingressLister interface {
+	// ListIngresses returns the list of Ingresses
+	ListIngresses() []*extensions.Ingress
 }
 
 // Config ...
@@ -62,13 +65,15 @@ type Config struct {
 
 	PublishService string
 
+	PublishStatusAddress string
+
 	ElectionID string
 
 	UpdateStatusOnShutdown bool
 
 	UseNodeInternalIP bool
 
-	IngressLister store.IngressLister
+	IngressLister ingressLister
 
 	DefaultIngressClass string
 	IngressClass        string
@@ -78,7 +83,9 @@ type Config struct {
 // in all the defined rules. To simplify the process leader election is used so the update
 // is executed only in one node (Ingress controllers can be scaled to more than one)
 // If the controller is running with the flag --publish-service (with a valid service)
-// the IP address behind the service is used, if not the source is the IP/s of the node/s
+// the IP address behind the service is used, if it is running with the flag
+// --publish-status-address, the address specified in the flag is used, if neither of the
+// two flags are set, the source is the IP/s of the node/s
 type statusSync struct {
 	Config
 	// pod contains runtime information about this pod
@@ -91,16 +98,8 @@ type statusSync struct {
 }
 
 // Run starts the loop to keep the status in sync
-func (s statusSync) Run(stopCh <-chan struct{}) {
-	go s.elector.Run()
-	go wait.Forever(s.update, updateInterval)
-	go s.syncQueue.Run(time.Second, stopCh)
-	<-stopCh
-}
-
-func (s *statusSync) update() {
-	// send a dummy object to the queue to force a sync
-	s.syncQueue.Enqueue("sync status")
+func (s statusSync) Run() {
+	s.elector.Run()
 }
 
 // Shutdown stop the sync. In case the instance is the leader it will remove the current IP
@@ -146,11 +145,6 @@ func (s *statusSync) sync(key interface{}) error {
 		return nil
 	}
 
-	if !s.elector.IsLeader() {
-		glog.V(2).Infof("skipping Ingress status update (I am not the current leader)")
-		return nil
-	}
-
 	addrs, err := s.runningAddresses()
 	if err != nil {
 		return err
@@ -188,6 +182,13 @@ func NewStatusSyncer(config Config) Sync {
 	callbacks := leaderelection.LeaderCallbacks{
 		OnStartedLeading: func(stop <-chan struct{}) {
 			glog.V(2).Infof("I am the new status update leader")
+			go st.syncQueue.Run(time.Second, stop)
+			// when this instance is the leader we need to enqueue
+			// an item to trigger the update of the Ingress status.
+			wait.PollUntil(updateInterval, func() (bool, error) {
+				st.syncQueue.EnqueueTask(task.GetDummyObject("sync status"))
+				return false, nil
+			}, stop)
 		},
 		OnStoppedLeading: func() {
 			glog.V(2).Infof("I am not status update leader anymore")
@@ -243,6 +244,11 @@ func (s *statusSync) runningAddresses() ([]string, error) {
 			return nil, err
 		}
 
+		if svc.Spec.Type == apiv1.ServiceTypeExternalName {
+			addrs = append(addrs, svc.Spec.ExternalName)
+			return addrs, nil
+		}
+
 		for _, ip := range svc.Status.LoadBalancer.Ingress {
 			if ip.IP == "" {
 				addrs = append(addrs, ip.Hostname)
@@ -255,6 +261,11 @@ func (s *statusSync) runningAddresses() ([]string, error) {
 		return addrs, nil
 	}
 
+	if s.PublishStatusAddress != "" {
+		addrs = append(addrs, s.PublishStatusAddress)
+		return addrs, nil
+	}
+
 	// get information about all the pods running the ingress controller
 	pods, err := s.Client.CoreV1().Pods(s.pod.Namespace).List(metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(s.pod.Labels).String(),
@@ -264,6 +275,11 @@ func (s *statusSync) runningAddresses() ([]string, error) {
 	}
 
 	for _, pod := range pods.Items {
+		// only Running pods are valid
+		if pod.Status.Phase != apiv1.PodRunning {
+			continue
+		}
+
 		name := k8s.GetNodeIPOrName(s.Client, pod.Spec.NodeName, s.UseNodeInternalIP)
 		if !sliceutils.StringInSlice(name, addrs) {
 			addrs = append(addrs, name)
@@ -304,20 +320,14 @@ func sliceToStatus(endpoints []string) []apiv1.LoadBalancerIngress {
 
 // updateStatus changes the status information of Ingress rules
 func (s *statusSync) updateStatus(newIngressPoint []apiv1.LoadBalancerIngress) {
-	ings := s.IngressLister.List()
+	ings := s.IngressLister.ListIngresses()
 
 	p := pool.NewLimited(10)
 	defer p.Close()
 
 	batch := p.Batch()
 
-	for _, cur := range ings {
-		ing := cur.(*extensions.Ingress)
-
-		if !class.IsValid(ing) {
-			continue
-		}
-
+	for _, ing := range ings {
 		batch.Queue(runUpdate(ing, newIngressPoint, s.Client))
 	}
 

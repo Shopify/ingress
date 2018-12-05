@@ -18,8 +18,8 @@ package config
 
 import (
 	"fmt"
-	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/golang/glog"
 
@@ -27,6 +27,7 @@ import (
 
 	"k8s.io/ingress-nginx/internal/ingress"
 	"k8s.io/ingress-nginx/internal/ingress/defaults"
+	"k8s.io/ingress-nginx/internal/runtime"
 )
 
 const (
@@ -49,7 +50,7 @@ const (
 
 	brotliTypes = "application/xml+rss application/atom+xml application/javascript application/x-javascript application/json application/rss+xml application/vnd.ms-fontobject application/x-font-ttf application/x-web-app-manifest+json application/xhtml+xml application/xml font/opentype image/svg+xml image/x-icon text/css text/plain text/x-component"
 
-	logFormatUpstream = `%v - [$the_real_ip] - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status`
+	logFormatUpstream = `%v - [$the_real_ip] - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status $req_id`
 
 	logFormatStream = `[$time_local] $protocol $status $bytes_sent $bytes_received $session_time`
 
@@ -76,7 +77,7 @@ const (
 	sslSessionCacheSize = "10m"
 
 	// Default setting for load balancer algorithm
-	defaultLoadBalancerAlgorithm = "least_conn"
+	defaultLoadBalancerAlgorithm = ""
 
 	// Parameters for a shared memory zone that will keep states for various keys.
 	// http://nginx.org/en/docs/http/ngx_http_limit_conn_module.html#limit_conn_zone
@@ -101,6 +102,10 @@ type Configuration struct {
 	// By default access logs go to /var/log/nginx/access.log
 	AccessLogPath string `json:"access-log-path,omitempty"`
 
+	// WorkerCpuAffinity bind nginx worker processes to CPUs this will improve response latency
+	// http://nginx.org/en/docs/ngx_core_module.html#worker_cpu_affinity
+	// By default this is disabled
+	WorkerCpuAffinity string `json:"worker-cpu-affinity,omitempty"`
 	// ErrorLogPath sets the path of the error logs
 	// http://nginx.org/en/docs/ngx_core_module.html#error_log
 	// By default error logs go to /var/log/nginx/error.log
@@ -140,6 +145,9 @@ type Configuration struct {
 	//http://nginx.org/en/docs/http/ngx_http_log_module.html
 	DisableAccessLog bool `json:"disable-access-log,omitempty"`
 
+	// DisableIpv6DNS disables IPv6 for nginx resolver
+	DisableIpv6DNS bool `json:"disable-ipv6-dns"`
+
 	// DisableIpv6 disable listening on ipv6 address
 	DisableIpv6 bool `json:"disable-ipv6,omitempty"`
 
@@ -152,26 +160,6 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_core_module.html#ignore_invalid_headers
 	// By default this is enabled
 	IgnoreInvalidHeaders bool `json:"ignore-invalid-headers"`
-
-	// EnableVtsStatus allows the replacement of the default status page with a third party module named
-	// nginx-module-vts - https://github.com/vozlt/nginx-module-vts
-	// By default this is disabled
-	EnableVtsStatus bool `json:"enable-vts-status,omitempty"`
-
-	// Vts config on http level
-	// Description: Sets parameters for a shared memory zone that will keep states for various keys. The cache is shared between all worker processe
-	// https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_zone
-	// Default value is 10m
-	VtsStatusZoneSize string `json:"vts-status-zone-size,omitempty"`
-
-	// Vts config on http level
-	// Description: Enables the keys by user defined variable. The key is a key string to calculate traffic.
-	// The name is a group string to calculate traffic. The key and name can contain variables such as $host,
-	// $server_name. The name's group belongs to filterZones if specified. The key's group belongs to serverZones
-	// if not specified second argument name. The example with geoip module is as follows:
-	// https://github.com/vozlt/nginx-module-vts#vhost_traffic_status_filter_by_set_key
-	// Default value is $geoip_country_code country::*
-	VtsDefaultFilterKey string `json:"vts-default-filter-key,omitempty"`
 
 	// RetryNonIdempotent since 1.9.13 NGINX will not retry non-idempotent requests (POST, LOCK, PATCH)
 	// in case of an error. The previous behavior can be restored using the value true
@@ -189,6 +177,12 @@ type Configuration struct {
 	// https://nginx.org/en/docs/http/ngx_http_v2_module.html#http2_max_header_size
 	// HTTP2MaxHeaderSize Limits the maximum size of the entire request header list after HPACK decompression
 	HTTP2MaxHeaderSize string `json:"http2-max-header-size,omitempty"`
+
+	// http://nginx.org/en/docs/http/ngx_http_v2_module.html#http2_max_requests
+	// HTTP2MaxRequests Sets the maximum number of requests (including push requests) that can be served
+	// through one HTTP/2 connection, after which the next client request will lead to connection closing
+	// and the need of establishing a new connection.
+	HTTP2MaxRequests int `json:"http2-max-requests,omitempty"`
 
 	// Enables or disables the header HSTS in servers running SSL
 	HSTS bool `json:"hsts,omitempty"`
@@ -234,6 +228,12 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_log_module.html#log_format
 	LogFormatStream string `json:"log-format-stream,omitempty"`
 
+	// If disabled, a worker process will accept one new connection at a time.
+	// Otherwise, a worker process will accept all new connections at a time.
+	// http://nginx.org/en/docs/ngx_core_module.html#multi_accept
+	// Default: true
+	EnableMultiAccept bool `json:"enable-multi-accept,omitempty"`
+
 	// Maximum number of simultaneous connections that can be opened by each worker process
 	// http://nginx.org/en/docs/ngx_core_module.html#worker_connections
 	MaxWorkerConnections int `json:"max-worker-connections,omitempty"`
@@ -242,6 +242,11 @@ type Configuration struct {
 	// Default value depends on the processor’s cache line size.
 	// http://nginx.org/en/docs/http/ngx_http_map_module.html#map_hash_bucket_size
 	MapHashBucketSize int `json:"map-hash-bucket-size,omitempty"`
+
+	// NginxStatusIpv4Whitelist has the list of cidr that are allowed to access
+	// the /nginx_status endpoint of the "_" server
+	NginxStatusIpv4Whitelist []string `json:"nginx-status-ipv4-whitelist,omitempty"`
+	NginxStatusIpv6Whitelist []string `json:"nginx-status-ipv6-whitelist,omitempty"`
 
 	// If UseProxyProtocol is enabled ProxyRealIPCIDR defines the default the IP/network address
 	// of your external load balancer
@@ -286,7 +291,7 @@ type Configuration struct {
 	SSLECDHCurve string `json:"ssl-ecdh-curve,omitempty"`
 
 	// The secret that contains Diffie-Hellman key to help with "Perfect Forward Secrecy"
-	// https://www.openssl.org/docs/manmaster/apps/dhparam.html
+	// https://wiki.openssl.org/index.php/Diffie-Hellman_parameters
 	// https://wiki.mozilla.org/Security/Server_Side_TLS#DHE_handshake_and_dhparam
 	// http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_dhparam
 	SSLDHParam string `json:"ssl-dh-param,omitempty"`
@@ -310,7 +315,7 @@ type Configuration struct {
 	// Sets the secret key used to encrypt and decrypt TLS session tickets.
 	// http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_session_tickets
 	// By default, a randomly generated key is used.
-	// Example: openssl rand 80 | base64 -w0
+	// Example: openssl rand 80 | openssl enc -A -base64
 	SSLSessionTicketKey string `json:"ssl-session-ticket-key,omitempty"`
 
 	// Time during which a client may reuse the session parameters stored in a cache.
@@ -329,9 +334,18 @@ type Configuration struct {
 	// https://www.nginx.com/resources/admin-guide/proxy-protocol/
 	UseProxyProtocol bool `json:"use-proxy-protocol,omitempty"`
 
+	// When use-proxy-protocol is enabled, sets the maximum time the connection handler will wait
+	// to receive proxy headers.
+	// Example '60s'
+	ProxyProtocolHeaderTimeout time.Duration `json:"proxy-protocol-header-timeout,omitempty"`
+
 	// Enables or disables the use of the nginx module that compresses responses using the "gzip" method
 	// http://nginx.org/en/docs/http/ngx_http_gzip_module.html
 	UseGzip bool `json:"use-gzip,omitempty"`
+
+	// Enables or disables the use of the nginx geoip module that creates variables with values depending on the client IP
+	// http://nginx.org/en/docs/http/ngx_http_geoip_module.html
+	UseGeoIP bool `json:"use-geoip,omitempty"`
 
 	// Enables or disables the use of the NGINX Brotli Module for compression
 	// https://github.com/google/ngx_brotli
@@ -347,6 +361,9 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_v2_module.html
 	// Default: true
 	UseHTTP2 bool `json:"use-http2,omitempty"`
+
+	// gzip Compression Level that will be used
+	GzipLevel int `json:"gzip-level,omitempty"`
 
 	// MIME types in addition to "text/html" to compress. The special value “*” matches any MIME type.
 	// Responses with the “text/html” type are always compressed if UseGzip is enabled
@@ -400,6 +417,9 @@ type Configuration struct {
 	// Sets the ipv6 addresses on which the server will accept requests.
 	BindAddressIpv6 []string `json:"bind-address-ipv6,omitempty"`
 
+	// Sets whether to use incoming X-Forwarded headers.
+	UseForwardedHeaders bool `json:"use-forwarded-headers"`
+
 	// Sets the header field for identifying the originating IP address of a client
 	// Default is X-Forwarded-For
 	ForwardedForHeader string `json:"forwarded-for-header,omitempty"`
@@ -407,6 +427,14 @@ type Configuration struct {
 	// Append the remote address to the X-Forwarded-For header instead of replacing it
 	// Default: false
 	ComputeFullForwardedFor bool `json:"compute-full-forwarded-for,omitempty"`
+
+	// If the request does not have a request-id, should we generate a random value?
+	// Default: true
+	GenerateRequestId bool `json:"generate-request-id,omitempty"`
+
+	// Adds an X-Original-Uri header with the original request URI to the backend request
+	// Default: true
+	ProxyAddOriginalUriHeader bool `json:"proxy-add-original-uri-header"`
 
 	// EnableOpentracing enables the nginx Opentracing extension
 	// https://github.com/rnburn/nginx-opentracing
@@ -423,6 +451,32 @@ type Configuration struct {
 	// Default: nginx
 	ZipkinServiceName string `json:"zipkin-service-name"`
 
+	// ZipkinSampleRate specifies sampling rate for traces
+	// Default: 1.0
+	ZipkinSampleRate float32 `json:"zipkin-sample-rate"`
+
+	// JaegerCollectorHost specifies the host to use when uploading traces
+	JaegerCollectorHost string `json:"jaeger-collector-host"`
+
+	// JaegerCollectorPort specifies the port to use when uploading traces
+	JaegerCollectorPort int `json:"jaeger-collector-port"`
+
+	// JaegerServiceName specifies the service name to use for any traces created
+	// Default: nginx
+	JaegerServiceName string `json:"jaeger-service-name"`
+
+	// JaegerSamplerType specifies the sampler to be used when sampling traces.
+	// The available samplers are: const, probabilistic, ratelimiting, remote
+	// Default: const
+	JaegerSamplerType string `json:"jaeger-sampler-type"`
+
+	// JaegerSamplerParam specifies the argument to be passed to the sampler constructor
+	// Default: 1
+	JaegerSamplerParam string `json:"jaeger-sampler-param"`
+
+	// MainSnippet adds custom configuration to the main section of the nginx configuration
+	MainSnippet string `json:"main-snippet"`
+
 	// HTTPSnippet adds custom configuration to the http section of the nginx configuration
 	HTTPSnippet string `json:"http-snippet"`
 
@@ -436,17 +490,81 @@ type Configuration struct {
 	// Supported codes are 301,302,307 and 308
 	// Default: 308
 	HTTPRedirectCode int `json:"http-redirect-code"`
+
+	// ReusePort instructs NGINX to create an individual listening socket for
+	// each worker process (using the SO_REUSEPORT socket option), allowing a
+	// kernel to distribute incoming connections between worker processes
+	// Default: true
+	ReusePort bool `json:"reuse-port"`
+
+	// HideHeaders sets additional header that will not be passed from the upstream
+	// server to the client response
+	// Default: empty
+	HideHeaders []string `json:"hide-headers"`
+
+	// LimitReqStatusCode Sets the status code to return in response to rejected requests.
+	// http://nginx.org/en/docs/http/ngx_http_limit_req_module.html#limit_req_status
+	// Default: 503
+	LimitReqStatusCode int `json:"limit-req-status-code"`
+
+	// EnableSyslog enables the configuration for remote logging in NGINX
+	EnableSyslog bool `json:"enable-syslog"`
+	// SyslogHost FQDN or IP address where the logs should be sent
+	SyslogHost string `json:"syslog-host"`
+	// SyslogPort port
+	SyslogPort int `json:"syslog-port"`
+
+	// NoTLSRedirectLocations is a comma-separated list of locations
+	// that should not get redirected to TLS
+	NoTLSRedirectLocations string `json:"no-tls-redirect-locations"`
+
+	// NoAuthLocations is a comma-separated list of locations that
+	// should not get authenticated
+	NoAuthLocations string `json:"no-auth-locations"`
+
+	// DisableLuaRestyWAF disables lua-resty-waf globally regardless
+	// of whether there's an ingress that has enabled the WAF using annotation
+	DisableLuaRestyWAF bool `json:"disable-lua-resty-waf"`
+
+	// EnableInfluxDB enables the nginx InfluxDB extension
+	// http://github.com/influxdata/nginx-influxdb-module/
+	// By default this is disabled
+	EnableInfluxDB bool `json:"enable-influxdb"`
+
+	// Checksum contains a checksum of the configmap configuration
+	Checksum string `json:"-"`
+
+	// Block all requests from given IPs
+	BlockCIDRs []string `json:"block-cidrs"`
+
+	// Block all requests with given User-Agent headers
+	BlockUserAgents []string `json:"block-user-agents"`
+
+	// Block all requests with given Referer headers
+	BlockReferers []string `json:"block-referers"`
 }
 
 // NewDefault returns the default nginx configuration
 func NewDefault() Configuration {
 	defIPCIDR := make([]string, 0)
-	defIPCIDR = append(defIPCIDR, "0.0.0.0/0")
 	defBindAddress := make([]string, 0)
+	defBlockEntity := make([]string, 0)
+	defNginxStatusIpv4Whitelist := make([]string, 0)
+	defNginxStatusIpv6Whitelist := make([]string, 0)
+
+	defIPCIDR = append(defIPCIDR, "0.0.0.0/0")
+	defNginxStatusIpv4Whitelist = append(defNginxStatusIpv4Whitelist, "127.0.0.1")
+	defNginxStatusIpv6Whitelist = append(defNginxStatusIpv6Whitelist, "::1")
+	defProxyDeadlineDuration := time.Duration(5) * time.Second
+
 	cfg := Configuration{
 		AllowBackendServerHeader:   false,
 		AccessLogPath:              "/var/log/nginx/access.log",
+		WorkerCpuAffinity:          "",
 		ErrorLogPath:               "/var/log/nginx/error.log",
+		BlockCIDRs:                 defBlockEntity,
+		BlockUserAgents:            defBlockEntity,
+		BlockReferers:              defBlockEntity,
 		BrotliLevel:                4,
 		BrotliTypes:                brotliTypes,
 		ClientHeaderBufferSize:     "1k",
@@ -456,16 +574,21 @@ func NewDefault() Configuration {
 		EnableDynamicTLSRecords:    true,
 		EnableUnderscoresInHeaders: false,
 		ErrorLogLevel:              errorLevel,
+		UseForwardedHeaders:        true,
 		ForwardedForHeader:         "X-Forwarded-For",
 		ComputeFullForwardedFor:    false,
+		ProxyAddOriginalUriHeader:  true,
+		GenerateRequestId:          true,
 		HTTP2MaxFieldSize:          "4k",
 		HTTP2MaxHeaderSize:         "16k",
+		HTTP2MaxRequests:           1000,
 		HTTPRedirectCode:           308,
 		HSTS:                       true,
 		HSTSIncludeSubdomains:      true,
 		HSTSMaxAge:                 hstsMaxAge,
 		HSTSPreload:                false,
 		IgnoreInvalidHeaders:       true,
+		GzipLevel:                  5,
 		GzipTypes:                  gzipTypes,
 		KeepAlive:                  75,
 		KeepAliveRequests:          100,
@@ -473,13 +596,18 @@ func NewDefault() Configuration {
 		LogFormatEscapeJSON:        false,
 		LogFormatStream:            logFormatStream,
 		LogFormatUpstream:          logFormatUpstream,
+		EnableMultiAccept:          true,
 		MaxWorkerConnections:       16384,
 		MapHashBucketSize:          64,
+		NginxStatusIpv4Whitelist:   defNginxStatusIpv4Whitelist,
+		NginxStatusIpv6Whitelist:   defNginxStatusIpv6Whitelist,
 		ProxyRealIPCIDR:            defIPCIDR,
+		ProxyProtocolHeaderTimeout: defProxyDeadlineDuration,
 		ServerNameHashMaxSize:      1024,
 		ProxyHeadersHashMaxSize:    512,
 		ProxyHeadersHashBucketSize: 64,
 		ProxyStreamResponses:       1,
+		ReusePort:                  true,
 		ShowServerTokens:           true,
 		SSLBufferSize:              sslBufferSize,
 		SSLCiphers:                 sslCiphers,
@@ -489,34 +617,36 @@ func NewDefault() Configuration {
 		SSLSessionCacheSize:        sslSessionCacheSize,
 		SSLSessionTickets:          true,
 		SSLSessionTimeout:          sslSessionTimeout,
-		EnableBrotli:               true,
+		EnableBrotli:               false,
 		UseGzip:                    true,
+		UseGeoIP:                   true,
 		WorkerProcesses:            strconv.Itoa(runtime.NumCPU()),
 		WorkerShutdownTimeout:      "10s",
 		LoadBalanceAlgorithm:       defaultLoadBalancerAlgorithm,
-		VtsStatusZoneSize:          "10m",
-		VtsDefaultFilterKey:        "$geoip_country_code country::*",
 		VariablesHashBucketSize:    128,
 		VariablesHashMaxSize:       2048,
 		UseHTTP2:                   true,
 		ProxyStreamTimeout:         "600s",
 		Backend: defaults.Backend{
-			ProxyBodySize:         bodySize,
-			ProxyConnectTimeout:   5,
-			ProxyReadTimeout:      60,
-			ProxySendTimeout:      60,
-			ProxyBufferSize:       "4k",
-			ProxyCookieDomain:     "off",
-			ProxyCookiePath:       "off",
-			ProxyNextUpstream:     "error timeout invalid_header http_502 http_503 http_504",
-			ProxyRequestBuffering: "on",
-			ProxyRedirectFrom:     "off",
-			SSLRedirect:           true,
-			CustomHTTPErrors:      []int{},
-			WhitelistSourceRange:  []string{},
-			SkipAccessLogURLs:     []string{},
-			LimitRate:             0,
-			LimitRateAfter:        0,
+			ProxyBodySize:          bodySize,
+			ProxyConnectTimeout:    5,
+			ProxyReadTimeout:       60,
+			ProxySendTimeout:       60,
+			ProxyBufferSize:        "4k",
+			ProxyCookieDomain:      "off",
+			ProxyCookiePath:        "off",
+			ProxyNextUpstream:      "error timeout",
+			ProxyNextUpstreamTries: 3,
+			ProxyRequestBuffering:  "on",
+			ProxyRedirectFrom:      "off",
+			ProxyRedirectTo:        "off",
+			SSLRedirect:            true,
+			CustomHTTPErrors:       []int{},
+			WhitelistSourceRange:   []string{},
+			SkipAccessLogURLs:      []string{},
+			LimitRate:              0,
+			LimitRateAfter:         0,
+			ProxyBuffering:         "off",
 		},
 		UpstreamKeepaliveConnections: 32,
 		LimitConnZoneVariable:        defaultLimitConnZoneVariable,
@@ -524,6 +654,15 @@ func NewDefault() Configuration {
 		BindAddressIpv6:              defBindAddress,
 		ZipkinCollectorPort:          9411,
 		ZipkinServiceName:            "nginx",
+		ZipkinSampleRate:             1.0,
+		JaegerCollectorPort:          6831,
+		JaegerServiceName:            "nginx",
+		JaegerSamplerType:            "const",
+		JaegerSamplerParam:           "1",
+		LimitReqStatusCode:           503,
+		SyslogPort:                   514,
+		NoTLSRedirectLocations:       "/.well-known/acme-challenge",
+		NoAuthLocations:              "/.well-known/acme-challenge",
 	}
 
 	if glog.V(5) {
@@ -546,23 +685,28 @@ func (cfg Configuration) BuildLogFormatUpstream() string {
 
 // TemplateConfig contains the nginx configuration to render the file nginx.conf
 type TemplateConfig struct {
-	ProxySetHeaders         map[string]string
-	AddHeaders              map[string]string
-	MaxOpenFiles            int
-	BacklogSize             int
-	Backends                []*ingress.Backend
-	PassthroughBackends     []*ingress.SSLPassthroughBackend
-	Servers                 []*ingress.Server
-	TCPBackends             []ingress.L4Service
-	UDPBackends             []ingress.L4Service
-	HealthzURI              string
-	CustomErrors            bool
-	Cfg                     Configuration
-	IsIPV6Enabled           bool
-	IsSSLPassthroughEnabled bool
-	RedirectServers         map[string]string
-	ListenPorts             *ListenPorts
-	PublishService          *apiv1.Service
+	ProxySetHeaders             map[string]string
+	AddHeaders                  map[string]string
+	MaxOpenFiles                int
+	BacklogSize                 int
+	Backends                    []*ingress.Backend
+	PassthroughBackends         []*ingress.SSLPassthroughBackend
+	Servers                     []*ingress.Server
+	TCPBackends                 []ingress.L4Service
+	UDPBackends                 []ingress.L4Service
+	HealthzURI                  string
+	CustomErrors                bool
+	Cfg                         Configuration
+	IsIPV6Enabled               bool
+	IsSSLPassthroughEnabled     bool
+	NginxStatusIpv4Whitelist    []string
+	NginxStatusIpv6Whitelist    []string
+	RedirectServers             map[string]string
+	ListenPorts                 *ListenPorts
+	PublishService              *apiv1.Service
+	DynamicConfigurationEnabled bool
+	DynamicCertificatesEnabled  bool
+	DisableLua                  bool
 }
 
 // ListenPorts describe the ports required to run the

@@ -14,12 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -o errexit
+set -o pipefail
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+if [ "$COMPONENT" == "docs" ]; then
+    echo "Skipping because we are publishing docs"
+    exit 0
+fi
+
+if [ $# -eq "1" ]
+then
+    export ARCH=$1
+fi
 
 source $DIR/common.sh
 
-echo "Login to quay.io..."
-docker login --username=$QUAY_USERNAME --password=$QUAY_PASSWORD quay.io >/dev/null 2>&1
+echo "Login to Docker Hub..."
+docker login --username=$DOCKER_USERNAME --password=$DOCKER_PASSWORD >/dev/null 2>&1
 
 case "$COMPONENT" in
 "ingress-controller")

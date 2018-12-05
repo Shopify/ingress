@@ -24,7 +24,7 @@ secret "tls-secret" created
 You can act as your very own CA, or use an existing one. As an exercise / learning, we're going to generate our
 own CA, and also generate a client certificate.
 
-These instructions are based on CoreOS OpenSSL [instructions](https://coreos.com/kubernetes/docs/latest/openssl.html)
+These instructions are based on CoreOS OpenSSL. [See live doc.](https://coreos.com/kubernetes/docs/latest/openssl.html)
 
 ### Generating a CA
 
@@ -119,7 +119,7 @@ the TLS Auth directive:
 $ kubectl create secret generic caingress --namespace=default --from-file=ca.crt=<ca.crt>
 ```
 
-Note: You can also generate the CA Authentication Secret along with the TLS Secret by using:
+__Note:__ You can also generate the CA Authentication Secret along with the TLS Secret by using:
 ```console
 $ kubectl create secret generic caingress --namespace=default --from-file=ca.crt=<ca.crt> --from-file=tls.crt=<tls.crt> --from-file=tls.key=<tls.key>
 ```
@@ -172,7 +172,7 @@ Events:
   1m		1m		1	{service-controller }			Normal		CreatingLoadBalancer	Creating load balancer
   16s		16s		1	{service-controller }			Normal		CreatedLoadBalancer	Created load balancer
 
-$ curl 108.59.87.126
+$ curl 108.59.87.136
 CLIENT VALUES:
 client_address=10.240.0.3
 command=GET

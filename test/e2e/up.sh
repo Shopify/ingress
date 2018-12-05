@@ -14,24 +14,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-export JSONPATH='{range .items[*]}{@.metadata.name}:{range @.status.conditions[*]}{@.type}={@.status};{end}{end}'
+set -e
 
-echo "downloading kubectl..."
-curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/$KUBERNETES_VERSION/bin/linux/amd64/kubectl && \
-    chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-echo "downloading minikube..."
-curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64 && \
-    chmod +x minikube && \
-    sudo mv minikube /usr/local/bin/
+if test -e kubectl; then
+  echo "skipping download of kubectl"
+else
+  echo "downloading kubectl..."
+  curl -Lo kubectl https://storage.googleapis.com/kubernetes-release/release/v1.11.0/bin/linux/amd64/kubectl && \
+      chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+fi
 
-echo "starting minikube..."
-sudo minikube start --vm-driver=none --kubernetes-version=$KUBERNETES_VERSION
+mkdir -p ${HOME}/.kube
+touch ${HOME}/.kube/config
+export KUBECONFIG=${HOME}/.kube/config
 
-minikube update-context
+echo "starting Kubernetes cluster..."
+$DIR/dind-cluster-v1.11.sh up
 
-echo "waiting for kubernetes cluster"
-until kubectl get nodes -o jsonpath="$JSONPATH" 2>&1 | grep -q "Ready=True";
-do
-    sleep 1;
-done
+kubectl config use-context dind
+
+echo "Kubernetes cluster:"
+kubectl get nodes -o wide
+
+export TAG=dev
+export ARCH=amd64
+export REGISTRY=${REGISTRY:-ingress-controller}
+
+echo "building container..."
+make -C ${DIR}/../../ build container
+
+echo "copying docker image to cluster..."
+DEV_IMAGE=${REGISTRY}/nginx-ingress-controller:${TAG}
+${DIR}/dind-cluster-v1.11.sh copy-image ${DEV_IMAGE}

@@ -104,6 +104,10 @@ func (c1 *Configuration) Equal(c2 *Configuration) bool {
 		}
 	}
 
+	if c1.BackendConfigChecksum != c2.BackendConfigChecksum {
+		return false
+	}
+
 	return true
 }
 
@@ -129,9 +133,6 @@ func (b1 *Backend) Equal(b2 *Backend) bool {
 		if b1.Service.GetName() != b2.Service.GetName() {
 			return false
 		}
-		if b1.Service.GetResourceVersion() != b2.Service.GetResourceVersion() {
-			return false
-		}
 	}
 
 	if b1.Port != b2.Port {
@@ -150,6 +151,9 @@ func (b1 *Backend) Equal(b2 *Backend) bool {
 		return false
 	}
 	if b1.UpstreamHashBy != b2.UpstreamHashBy {
+		return false
+	}
+	if b1.LoadBalancing != b2.LoadBalancing {
 		return false
 	}
 
@@ -256,25 +260,28 @@ func (s1 *Server) Equal(s2 *Server) bool {
 	if s1.Hostname != s2.Hostname {
 		return false
 	}
-	if s1.Alias != s2.Alias {
-		return false
-	}
 	if s1.SSLPassthrough != s2.SSLPassthrough {
 		return false
 	}
-	if s1.SSLCertificate != s2.SSLCertificate {
+	if !(&s1.SSLCert).Equal(&s2.SSLCert) {
 		return false
 	}
-	if s1.SSLPemChecksum != s2.SSLPemChecksum {
+	if s1.Alias != s2.Alias {
+		return false
+	}
+	if s1.RedirectFromToWWW != s2.RedirectFromToWWW {
 		return false
 	}
 	if !(&s1.CertificateAuth).Equal(&s2.CertificateAuth) {
 		return false
 	}
-	if s1.SSLFullChainCertificate != s2.SSLFullChainCertificate {
+	if s1.ServerSnippet != s2.ServerSnippet {
 		return false
 	}
-	if s1.RedirectFromToWWW != s2.RedirectFromToWWW {
+	if s1.SSLCiphers != s2.SSLCiphers {
+		return false
+	}
+	if s1.AuthTLSError != s2.AuthTLSError {
 		return false
 	}
 
@@ -318,9 +325,6 @@ func (l1 *Location) Equal(l2 *Location) bool {
 			return false
 		}
 		if l1.Service.GetName() != l2.Service.GetName() {
-			return false
-		}
-		if l1.Service.GetResourceVersion() != l2.Service.GetResourceVersion() {
 			return false
 		}
 	}
@@ -367,6 +371,25 @@ func (l1 *Location) Equal(l2 *Location) bool {
 	if l1.UpstreamVhost != l2.UpstreamVhost {
 		return false
 	}
+	if l1.XForwardedPrefix != l2.XForwardedPrefix {
+		return false
+	}
+	if !(&l1.Connection).Equal(&l2.Connection) {
+		return false
+	}
+	if !(&l1.Logs).Equal(&l2.Logs) {
+		return false
+	}
+	if l1.GRPC != l2.GRPC {
+		return false
+	}
+	if !(&l1.LuaRestyWAF).Equal(&l2.LuaRestyWAF) {
+		return false
+	}
+
+	if !(&l1.InfluxDB).Equal(&l2.InfluxDB) {
+		return false
+	}
 
 	return true
 }
@@ -397,9 +420,6 @@ func (ptb1 *SSLPassthroughBackend) Equal(ptb2 *SSLPassthroughBackend) bool {
 			return false
 		}
 		if ptb1.Service.GetName() != ptb2.Service.GetName() {
-			return false
-		}
-		if ptb1.Service.GetResourceVersion() != ptb2.Service.GetResourceVersion() {
 			return false
 		}
 	}
@@ -465,7 +485,7 @@ func (l4b1 *L4Backend) Equal(l4b2 *L4Backend) bool {
 	return true
 }
 
-// Equal tests for equality between two L4Backend types
+// Equal tests for equality between two SSLCert types
 func (s1 *SSLCert) Equal(s2 *SSLCert) bool {
 	if s1 == s2 {
 		return true
@@ -480,6 +500,12 @@ func (s1 *SSLCert) Equal(s2 *SSLCert) bool {
 		return false
 	}
 	if !s1.ExpireTime.Equal(s2.ExpireTime) {
+		return false
+	}
+	if s1.FullChainPemFileName != s2.FullChainPemFileName {
+		return false
+	}
+	if s1.PemCertKey != s2.PemCertKey {
 		return false
 	}
 

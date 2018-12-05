@@ -37,7 +37,7 @@ var (
 	authVerifyClientRegex = regexp.MustCompile(`on|off|optional|optional_no_ca`)
 )
 
-// Config contains the AuthSSLCert used for muthual autentication
+// Config contains the AuthSSLCert used for mutual authentication
 // and the configured ValidationDepth
 type Config struct {
 	resolver.AuthSSLCert
@@ -45,6 +45,7 @@ type Config struct {
 	ValidationDepth    int    `json:"validationDepth"`
 	ErrorPage          string `json:"errorPage"`
 	PassCertToUpstream bool   `json:"passCertToUpstream"`
+	AuthTLSError       string
 }
 
 // Equal tests for equality between two Config types
@@ -113,9 +114,8 @@ func (a authTLS) Parse(ing *extensions.Ingress) (interface{}, error) {
 
 	authCert, err := a.r.GetAuthCertificate(tlsauthsecret)
 	if err != nil {
-		return &Config{}, ing_errors.LocationDenied{
-			Reason: errors.Wrap(err, "error obtaining certificate"),
-		}
+		e := errors.Wrap(err, "error obtaining certificate")
+		return &Config{}, ing_errors.LocationDenied{Reason: e}
 	}
 
 	errorpage, err := parser.GetStringAnnotation("auth-tls-error-page", ing)

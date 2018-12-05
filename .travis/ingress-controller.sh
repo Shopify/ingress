@@ -14,17 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -o errexit
+set -o pipefail
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 source $DIR/common.sh
 
 IMAGE=$(make -s -C $DIR/../ image-info)
 
-if docker_tag_exists "kubernetes-ingress-controller/nginx-ingress-controller" $(echo $IMAGE | jq .tag) "$ARCH"; then
+if docker_tag_exists "shopify/nginx-ingress-controller" $(echo $IMAGE | jq .tag) "$ARCH"; then
     echo "Image already published"
     exit 0
 fi
 
 echo "building nginx-ingress-controller-$ARCH image..."
+export REGISTRY="index.docker.io/shopify"
 make -C $DIR/../ sub-container-$ARCH
 make -C $DIR/../ sub-push-$ARCH
