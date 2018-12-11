@@ -564,7 +564,7 @@ func (n *NGINXController) getBackendServers(ingresses []*ingress.Ingress) ([]*in
 		}
 
 		// set aside canary ingresses to merge later
-		if anns.Canary.Enabled {
+		if isCanary(ing) {
 			canaryIngresses = append(canaryIngresses, ing)
 		}
 	}
@@ -683,7 +683,7 @@ func (n *NGINXController) createUpstreams(data []*ingress.Ingress, du *ingress.B
 			}
 
 			// configure traffic shaping for canary
-			if anns.Canary.Enabled {
+			if isCanary(ing) {
 				upstreams[defBackend].NoServer = true
 				upstreams[defBackend].TrafficShapingPolicy = ingress.TrafficShapingPolicy{
 					Weight: anns.Canary.Weight,
@@ -748,7 +748,7 @@ func (n *NGINXController) createUpstreams(data []*ingress.Ingress, du *ingress.B
 				}
 
 				// configure traffic shaping for canary
-				if anns.Canary.Enabled {
+				if isCanary(ing) {
 					upstreams[name].NoServer = true
 					upstreams[name].TrafficShapingPolicy = ingress.TrafficShapingPolicy{
 						Weight: anns.Canary.Weight,
@@ -948,7 +948,7 @@ func (n *NGINXController) createServers(data []*ingress.Ingress,
 		// default upstream name
 		un := du.Name
 
-		if anns.Canary.Enabled {
+		if isCanary(ing) {
 			klog.V(2).Infof("Ingress %v is marked as Canary, ignoring", ingKey)
 			continue
 		}
@@ -1029,7 +1029,7 @@ func (n *NGINXController) createServers(data []*ingress.Ingress,
 		ingKey := k8s.MetaNamespaceKey(ing)
 		anns := ing.ParsedAnnotations
 
-		if anns.Canary.Enabled {
+		if isCanary(ing) {
 			klog.V(2).Infof("Ingress %v is marked as Canary, ignoring", ingKey)
 			continue
 		}
@@ -1330,4 +1330,19 @@ func getRemovedIngresses(rucfg, newcfg *ingress.Configuration) []string {
 	}
 
 	return oldIngresses.Difference(newIngresses).List()
+}
+
+// isCanary returns whether an Ingress has the canary annotation
+// or contains 'canary' in its name.
+func isCanary(ing *ingress.Ingress) bool {
+	if ing.ParsedAnnotations.Canary.Enabled {
+		return true
+	}
+
+	if strings.Contains(ing.Name, "canary") {
+		klog.Warning("Canary ingress %v/%v does not have canary annotation set to true.", ing.GetNamespace(), ing.GetName())
+		return true
+	}
+
+	return false
 }

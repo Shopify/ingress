@@ -939,3 +939,71 @@ func fakeX509Cert(dnsNames []string) *x509.Certificate {
 		},
 	}
 }
+
+func TestIsCanary(t *testing.T) {
+	testCases := []struct {
+		ing    *ingress.Ingress
+		canary bool
+	}{
+		{
+			ing: &ingress.Ingress{
+				Ingress: extensions.Ingress{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "example-canary-1",
+					},
+				},
+				ParsedAnnotations: &annotations.Ingress{
+					Canary: canary.Config{
+						Enabled: true,
+					},
+				},
+			},
+			canary: true,
+		},
+		{
+			ing: &ingress.Ingress{
+				Ingress: extensions.Ingress{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "example-1",
+					},
+				},
+				ParsedAnnotations: &annotations.Ingress{},
+			},
+			canary: false,
+		},
+		{
+			ing: &ingress.Ingress{
+				Ingress: extensions.Ingress{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "example-2",
+					},
+				},
+				ParsedAnnotations: &annotations.Ingress{
+					Canary: canary.Config{
+						Enabled: true,
+					},
+				},
+			},
+			canary: true,
+		},
+
+		{
+			ing: &ingress.Ingress{
+				Ingress: extensions.Ingress{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "example-canary-2",
+					},
+				},
+				ParsedAnnotations: &annotations.Ingress{},
+			},
+			canary: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		res := isCanary(testCase.ing)
+		if res != testCase.canary {
+			t.Errorf("bad isCanary result for %s, expected %v, got %v", testCase.ing.Name, testCase.canary, res)
+		}
+	}
+}
