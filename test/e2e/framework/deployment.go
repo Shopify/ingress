@@ -33,16 +33,22 @@ func (f *Framework) NewEchoDeployment() {
 // NewEchoDeploymentWithReplicas creates a new deployment of the echoserver image in a particular namespace. Number of
 // replicas is configurable
 func (f *Framework) NewEchoDeploymentWithReplicas(replicas int32) {
-	f.NewDeployment("http-svc", "gcr.io/kubernetes-e2e-test-images/echoserver:2.2", 8080, replicas)
+	f.NewDeployment("http-svc", "gcr.io/kubernetes-e2e-test-images/echoserver:2.2", 8080, replicas, nil)
+}
+
+// NewEchoDeploymentWithArgs creates a new deployment of the echoserver image in a particular namespace.
+// args are configurable
+func (f *Framework) NewEchoDeploymentWithArgs(args []string) {
+	f.NewDeployment("http-svc", "gcr.io/kubernetes-e2e-test-images/echoserver:2.2", 8080, 1, nil)
 }
 
 // NewHttpbinDeployment creates a new single replica deployment of the httpbin image in a particular namespace.
 func (f *Framework) NewHttpbinDeployment() {
-	f.NewDeployment("httpbin", "kennethreitz/httpbin", 80, 1)
+	f.NewDeployment("httpbin", "kennethreitz/httpbin", 80, 1, nil)
 }
 
 // NewDeployment creates a new deployment in a particular namespace.
-func (f *Framework) NewDeployment(name, image string, port int32, replicas int32) {
+func (f *Framework) NewDeployment(name, image string, port int32, replicas int32, args []string) {
 	probe := &corev1.Probe{
 		InitialDelaySeconds: 5,
 		PeriodSeconds:       10,
@@ -89,6 +95,7 @@ func (f *Framework) NewDeployment(name, image string, port int32, replicas int32
 							},
 							ReadinessProbe: probe,
 							LivenessProbe:  probe,
+							Args:           args,
 						},
 					},
 				},

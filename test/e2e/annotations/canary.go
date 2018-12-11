@@ -40,7 +40,7 @@ var _ = framework.IngressNginxDescribe("Annotations - canary", func() {
 		f.NewEchoDeployment()
 
 		// Deployment for canary backend
-		f.NewDeployment("http-svc-canary", "gcr.io/kubernetes-e2e-test-images/echoserver:2.2", 8080, 1)
+		f.NewDeployment("http-svc-canary", "gcr.io/kubernetes-e2e-test-images/echoserver:2.2", 8080, 1, nil)
 	})
 
 	Context("when canary is created", func() {

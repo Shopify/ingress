@@ -97,6 +97,8 @@ type Configuration struct {
 	SyncRateLimit float32
 
 	DynamicCertificatesEnabled bool
+
+	DisableCatchAll bool
 }
 
 // GetPublishService returns the Service used to set the load-balancer status of Ingresses.
@@ -954,7 +956,10 @@ func (n *NGINXController) createServers(data []*ingress.Ingress,
 			continue
 		}
 
+		klog.Infof("Having Ing %s", ingKey)
+
 		if ing.Spec.Backend != nil {
+			klog.Infof("Having Ing %s is a catch-all", ingKey)
 			defUpstream := upstreamName(ing.Namespace, ing.Spec.Backend.ServiceName, ing.Spec.Backend.ServicePort)
 
 			if backendUpstream, ok := upstreams[defUpstream]; ok {
