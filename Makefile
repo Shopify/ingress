@@ -184,6 +184,10 @@ vet:
 luacheck:
 	luacheck -q ./rootfs/etc/nginx/lua/
 
+.PHONY: luadeps
+luadeps:
+	@./hack/build_lua_deps.sh
+
 .PHONY: release
 release: all-container all-push
 	echo "done"
