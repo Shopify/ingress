@@ -48,7 +48,7 @@ jobs:
     before_script:
     - test/e2e/up.sh
     script:
-    - travis_wait make e2e-test
+    - make e2e-test
   # split builds to avoid job timeouts
   - stage: publish amd64
     if: type = push AND branch = releases AND repo = Shopify/ingress AND env(COMPONENT) = "ingress-controller"
