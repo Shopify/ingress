@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	jsoniter "github.com/json-iterator/go"
+	extensions "k8s.io/api/extensions/v1beta1"
 	"k8s.io/ingress-nginx/internal/file"
 	"k8s.io/ingress-nginx/internal/ingress"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/authreq"
@@ -44,8 +45,6 @@ var (
 		Target           string
 		Location         string
 		ProxyPass        string
-		AddBaseURL       bool
-		BaseURLScheme    string
 		Sticky           bool
 		XForwardedPrefix bool
 		SecureBackend    bool
@@ -57,8 +56,6 @@ var (
 			"/",
 			"proxy_pass https://upstream_balancer;",
 			false,
-			"",
-			false,
 			false,
 			true,
 			false,
@@ -69,8 +66,6 @@ var (
 			"/",
 			"proxy_pass https://upstream_balancer;",
 			false,
-			"",
-			false,
 			false,
 			true,
 			false,
@@ -80,8 +75,6 @@ var (
 			"/",
 			"/",
 			"proxy_pass https://upstream_balancer;",
-			false,
-			"",
 			true,
 			false,
 			true,
@@ -93,8 +86,6 @@ var (
 			"/",
 			"proxy_pass http://upstream_balancer;",
 			false,
-			"",
-			false,
 			false,
 			false,
 			false,
@@ -105,8 +96,6 @@ var (
 			"/",
 			"proxy_pass http://upstream_balancer;",
 			false,
-			"",
-			false,
 			false,
 			false,
 			false,
@@ -114,157 +103,10 @@ var (
 		"redirect / to /jenkins": {
 			"/",
 			"/jenkins",
-			"~* ^/",
+			`~* "^/"`,
 			`
-rewrite "(?i)/(.*)" /jenkins/$1 break;
-rewrite "(?i)/$" /jenkins/ break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something to /": {
-			"/something",
-			"/",
-			`~* "^/something\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something/(.*)" /$1 break;
-rewrite "(?i)/something$" / break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /end-with-slash/ to /not-root": {
-			"/end-with-slash/",
-			"/not-root",
-			`~* "^/end-with-slash/(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/end-with-slash/(.*)" /not-root/$1 break;
-rewrite "(?i)/end-with-slash/$" /not-root/ break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something-complex to /not-root": {
-			"/something-complex",
-			"/not-root",
-			`~* "^/something-complex\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something-complex/(.*)" /not-root/$1 break;
-rewrite "(?i)/something-complex$" /not-root/ break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect / to /jenkins and rewrite": {
-			"/",
-			"/jenkins",
-			"~* ^/",
-			`
-rewrite "(?i)/(.*)" /jenkins/$1 break;
-rewrite "(?i)/$" /jenkins/ break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="$scheme://$http_host/$escaped_base_uri">' ro;
-`,
-			true,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something to / and rewrite": {
-			"/something",
-			"/",
-			`~* "^/something\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something/(.*)" /$1 break;
-rewrite "(?i)/something$" / break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="$scheme://$http_host/something/$escaped_base_uri">' ro;
-`,
-			true,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /end-with-slash/ to /not-root and rewrite": {
-			"/end-with-slash/",
-			"/not-root",
-			`~* "^/end-with-slash/(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/end-with-slash/(.*)" /not-root/$1 break;
-rewrite "(?i)/end-with-slash/$" /not-root/ break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="$scheme://$http_host/end-with-slash/$escaped_base_uri">' ro;
-`,
-			true,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something-complex to /not-root and rewrite": {
-			"/something-complex",
-			"/not-root",
-			`~* "^/something-complex\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something-complex/(.*)" /not-root/$1 break;
-rewrite "(?i)/something-complex$" /not-root/ break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="$scheme://$http_host/something-complex/$escaped_base_uri">' ro;
-`,
-			true,
-			"",
-			false,
-			false,
-			false,
-			true,
-		},
-		"redirect /something to / and rewrite with specific scheme": {
-			"/something",
-			"/",
-			`~* "^/something\/?(?<baseuri>.*)"`,
-			`
-rewrite "(?i)/something/(.*)" /$1 break;
-rewrite "(?i)/something$" / break;
-proxy_pass http://upstream_balancer;
-
-set_escape_uri $escaped_base_uri $baseuri;
-subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="http://$http_host/something/$escaped_base_uri">' ro;
-`,
-			true,
-			"http",
+rewrite "(?i)/" /jenkins break;
+proxy_pass http://upstream_balancer;`,
 			false,
 			false,
 			false,
@@ -273,14 +115,10 @@ subs_filter '(<(?:H|h)(?:E|e)(?:A|a)(?:D|d)(?:[^">]|"[^"]*")*>)' '$1<base href="
 		"redirect / to /something with sticky enabled": {
 			"/",
 			"/something",
-			`~* ^/`,
+			`~* "^/"`,
 			`
-rewrite "(?i)/(.*)" /something/$1 break;
-rewrite "(?i)/$" /something/ break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"http",
+rewrite "(?i)/" /something break;
+proxy_pass http://upstream_balancer;`,
 			true,
 			false,
 			false,
@@ -289,14 +127,10 @@ proxy_pass http://upstream_balancer;
 		"redirect / to /something with sticky and dynamic config enabled": {
 			"/",
 			"/something",
-			`~* ^/`,
+			`~* "^/"`,
 			`
-rewrite "(?i)/(.*)" /something/$1 break;
-rewrite "(?i)/$" /something/ break;
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"http",
+rewrite "(?i)/" /something break;
+proxy_pass http://upstream_balancer;`,
 			true,
 			false,
 			false,
@@ -305,15 +139,11 @@ proxy_pass http://upstream_balancer;
 		"add the X-Forwarded-Prefix header": {
 			"/there",
 			"/something",
-			`~* "^/there\/?(?<baseuri>.*)"`,
+			`~* "^/there"`,
 			`
-rewrite "(?i)/there/(.*)" /something/$1 break;
-rewrite "(?i)/there$" /something/ break;
-proxy_set_header X-Forwarded-Prefix "/there/";
-proxy_pass http://upstream_balancer;
-`,
-			false,
-			"http",
+rewrite "(?i)/there" /something break;
+proxy_set_header X-Forwarded-Prefix "/there";
+proxy_pass http://upstream_balancer;`,
 			true,
 			true,
 			false,
@@ -324,8 +154,6 @@ proxy_pass http://upstream_balancer;
 			"/something",
 			`~* "^/something"`,
 			"proxy_pass http://upstream_balancer;",
-			false,
-			"",
 			false,
 			false,
 			false,
@@ -384,7 +212,7 @@ func TestBuildLocation(t *testing.T) {
 	for k, tc := range tmplFuncTestcases {
 		loc := &ingress.Location{
 			Path:    tc.Path,
-			Rewrite: rewrite.Config{Target: tc.Target, AddBaseURL: tc.AddBaseURL},
+			Rewrite: rewrite.Config{Target: tc.Target},
 		}
 
 		newLoc := buildLocation(loc, tc.enforceRegex)
@@ -401,7 +229,7 @@ func TestBuildProxyPass(t *testing.T) {
 	for k, tc := range tmplFuncTestcases {
 		loc := &ingress.Location{
 			Path:             tc.Path,
-			Rewrite:          rewrite.Config{Target: tc.Target, AddBaseURL: tc.AddBaseURL, BaseURLScheme: tc.BaseURLScheme},
+			Rewrite:          rewrite.Config{Target: tc.Target},
 			Backend:          defaultBackend,
 			XForwardedPrefix: tc.XForwardedPrefix,
 		}
@@ -767,7 +595,7 @@ func TestBuildUpstreamName(t *testing.T) {
 	for k, tc := range tmplFuncTestcases {
 		loc := &ingress.Location{
 			Path:             tc.Path,
-			Rewrite:          rewrite.Config{Target: tc.Target, AddBaseURL: tc.AddBaseURL, BaseURLScheme: tc.BaseURLScheme},
+			Rewrite:          rewrite.Config{Target: tc.Target},
 			Backend:          defaultBackend,
 			XForwardedPrefix: tc.XForwardedPrefix,
 		}
@@ -841,5 +669,78 @@ func TestOpentracingPropagateContext(t *testing.T) {
 		if actualDirective != expectedDirective {
 			t.Errorf("Expected %v but returned %v", expectedDirective, actualDirective)
 		}
+	}
+}
+
+func TestGetIngressInformation(t *testing.T) {
+	validIngress := &ingress.Ingress{}
+	invalidIngress := "wrongtype"
+	validPath := "/ok"
+	invalidPath := 10
+
+	info := getIngressInformation(invalidIngress, validPath)
+	expected := &ingressInformation{}
+	if !info.Equal(expected) {
+		t.Errorf("Expected %v, but got %v", expected, info)
+	}
+
+	info = getIngressInformation(validIngress, invalidPath)
+	if !info.Equal(expected) {
+		t.Errorf("Expected %v, but got %v", expected, info)
+	}
+
+	// Setup Ingress Resource
+	validIngress.Namespace = "default"
+	validIngress.Name = "validIng"
+	validIngress.Annotations = map[string]string{
+		"ingress.annotation": "ok",
+	}
+	validIngress.Spec.Backend = &extensions.IngressBackend{
+		ServiceName: "a-svc",
+	}
+
+	info = getIngressInformation(validIngress, validPath)
+	expected = &ingressInformation{
+		Namespace: "default",
+		Rule:      "validIng",
+		Annotations: map[string]string{
+			"ingress.annotation": "ok",
+		},
+		Service: "a-svc",
+	}
+	if !info.Equal(expected) {
+		t.Errorf("Expected %v, but got %v", expected, info)
+	}
+
+	validIngress.Spec.Backend = nil
+	validIngress.Spec.Rules = []extensions.IngressRule{
+		{
+			IngressRuleValue: extensions.IngressRuleValue{
+				HTTP: &extensions.HTTPIngressRuleValue{
+					Paths: []extensions.HTTPIngressPath{
+						{
+							Path: "/ok",
+							Backend: extensions.IngressBackend{
+								ServiceName: "b-svc",
+							},
+						},
+					},
+				},
+			},
+		},
+		{},
+	}
+
+	info = getIngressInformation(validIngress, validPath)
+	expected = &ingressInformation{
+		Namespace: "default",
+		Rule:      "validIng",
+		Annotations: map[string]string{
+			"ingress.annotation": "ok",
+		},
+		Service: "b-svc",
+	}
+	if !info.Equal(expected) {
+		t.Errorf("Expected %v, but got %v", expected, info)
 	}
 }

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"reflect"
+	"sort"
 	"sync"
 	"time"
 
@@ -76,8 +77,8 @@ type Storer interface {
 	// ListIngresses returns a list of all Ingresses in the store.
 	ListIngresses() []*ingress.Ingress
 
-	// ListControllerPods returns a list of ingress-nginx controller Pods.
-	ListControllerPods() []*corev1.Pod
+	// GetRunningControllerPodsCount returns the number of Running ingress-nginx controller Pods.
+	GetRunningControllerPodsCount() int
 
 	// GetLocalSSLCert returns the local copy of a SSLCert
 	GetLocalSSLCert(name string) (*ingress.SSLCert, error)
@@ -232,7 +233,8 @@ func New(checkOCSP bool,
 	fs file.Filesystem,
 	updateCh *channels.RingChannel,
 	isDynamicCertificatesEnabled bool,
-	pod *k8s.PodInfo) Storer {
+	pod *k8s.PodInfo,
+	disableCatchAll bool) Storer {
 
 	store := &k8sStore{
 		isOCSPCheckEnabled:           checkOCSP,
@@ -288,12 +290,10 @@ func New(checkOCSP bool,
 	store.informers.Pod = cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (k8sruntime.Object, error) {
-
 				options.LabelSelector = labelSelector.String()
 				return client.CoreV1().Pods(store.pod.Namespace).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-
 				options.LabelSelector = labelSelector.String()
 				return client.CoreV1().Pods(store.pod.Namespace).Watch(options)
 			},
@@ -304,12 +304,52 @@ func New(checkOCSP bool,
 	)
 	store.listers.Pod.Store = store.informers.Pod.GetStore()
 
+	ingDeleteHandler := func(obj interface{}) {
+		ing, ok := obj.(*extensions.Ingress)
+		if !ok {
+			// If we reached here it means the ingress was deleted but its final state is unrecorded.
+			tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
+			if !ok {
+				klog.Errorf("couldn't get object from tombstone %#v", obj)
+				return
+			}
+			ing, ok = tombstone.Obj.(*extensions.Ingress)
+			if !ok {
+				klog.Errorf("Tombstone contained object that is not an Ingress: %#v", obj)
+				return
+			}
+		}
+		if !class.IsValid(ing) {
+			klog.Infof("ignoring delete for ingress %v based on annotation %v", ing.Name, class.IngressKey)
+			return
+		}
+		if ing.Spec.Backend != nil && disableCatchAll {
+			klog.Infof("ignoring delete for catch-all ingress %v/%v because of --disable-catch-all", ing.Namespace, ing.Name)
+			return
+		}
+		recorder.Eventf(ing, corev1.EventTypeNormal, "DELETE", fmt.Sprintf("Ingress %s/%s", ing.Namespace, ing.Name))
+
+		store.listers.IngressWithAnnotation.Delete(ing)
+
+		key := k8s.MetaNamespaceKey(ing)
+		store.secretIngressMap.Delete(key)
+
+		updateCh.In() <- Event{
+			Type: DeleteEvent,
+			Obj:  obj,
+		}
+	}
+
 	ingEventHandler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			ing := obj.(*extensions.Ingress)
 			if !class.IsValid(ing) {
 				a, _ := parser.GetStringAnnotation(class.IngressKey, ing)
 				klog.Infof("ignoring add for ingress %v based on annotation %v with value %v", ing.Name, class.IngressKey, a)
+				return
+			}
+			if ing.Spec.Backend != nil && disableCatchAll {
+				klog.Infof("ignoring add for catch-all ingress %v/%v because of --disable-catch-all", ing.Namespace, ing.Name)
 				return
 			}
 			recorder.Eventf(ing, corev1.EventTypeNormal, "CREATE", fmt.Sprintf("Ingress %s/%s", ing.Namespace, ing.Name))
@@ -323,49 +363,31 @@ func New(checkOCSP bool,
 				Obj:  obj,
 			}
 		},
-		DeleteFunc: func(obj interface{}) {
-			ing, ok := obj.(*extensions.Ingress)
-			if !ok {
-				// If we reached here it means the ingress was deleted but its final state is unrecorded.
-				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
-				if !ok {
-					klog.Errorf("couldn't get object from tombstone %#v", obj)
-					return
-				}
-				ing, ok = tombstone.Obj.(*extensions.Ingress)
-				if !ok {
-					klog.Errorf("Tombstone contained object that is not an Ingress: %#v", obj)
-					return
-				}
-			}
-			if !class.IsValid(ing) {
-				klog.Infof("ignoring delete for ingress %v based on annotation %v", ing.Name, class.IngressKey)
-				return
-			}
-			recorder.Eventf(ing, corev1.EventTypeNormal, "DELETE", fmt.Sprintf("Ingress %s/%s", ing.Namespace, ing.Name))
-
-			store.listers.IngressWithAnnotation.Delete(ing)
-
-			key := k8s.MetaNamespaceKey(ing)
-			store.secretIngressMap.Delete(key)
-
-			updateCh.In() <- Event{
-				Type: DeleteEvent,
-				Obj:  obj,
-			}
-		},
+		DeleteFunc: ingDeleteHandler,
 		UpdateFunc: func(old, cur interface{}) {
 			oldIng := old.(*extensions.Ingress)
 			curIng := cur.(*extensions.Ingress)
 			validOld := class.IsValid(oldIng)
 			validCur := class.IsValid(curIng)
 			if !validOld && validCur {
+				if curIng.Spec.Backend != nil && disableCatchAll {
+					klog.Infof("ignoring update for catch-all ingress %v/%v because of --disable-catch-all", curIng.Namespace, curIng.Name)
+					return
+				}
+
 				klog.Infof("creating ingress %v based on annotation %v", curIng.Name, class.IngressKey)
 				recorder.Eventf(curIng, corev1.EventTypeNormal, "CREATE", fmt.Sprintf("Ingress %s/%s", curIng.Namespace, curIng.Name))
 			} else if validOld && !validCur {
 				klog.Infof("removing ingress %v based on annotation %v", curIng.Name, class.IngressKey)
-				recorder.Eventf(curIng, corev1.EventTypeNormal, "DELETE", fmt.Sprintf("Ingress %s/%s", curIng.Namespace, curIng.Name))
+				ingDeleteHandler(old)
+				return
 			} else if validCur && !reflect.DeepEqual(old, cur) {
+				if curIng.Spec.Backend != nil && disableCatchAll {
+					klog.Infof("ignoring update for catch-all ingress %v/%v and delete old one because of --disable-catch-all", curIng.Namespace, curIng.Name)
+					ingDeleteHandler(old)
+					return
+				}
+
 				recorder.Eventf(curIng, corev1.EventTypeNormal, "UPDATE", fmt.Sprintf("Ingress %s/%s", curIng.Namespace, curIng.Name))
 			} else {
 				klog.Infof("ignoring ingress %v based on annotation %v", curIng.Name, class.IngressKey)
@@ -604,6 +626,7 @@ func (s *k8sStore) syncIngress(ing *extensions.Ingress) {
 	copyIng := &extensions.Ingress{}
 	ing.ObjectMeta.DeepCopyInto(&copyIng.ObjectMeta)
 	ing.Spec.DeepCopyInto(&copyIng.Spec)
+	ing.Status.DeepCopyInto(&copyIng.Status)
 
 	for ri, rule := range copyIng.Spec.Rules {
 		if rule.HTTP == nil {
@@ -737,6 +760,13 @@ func (s *k8sStore) ListIngresses() []*ingress.Ingress {
 		ingresses = append(ingresses, ing)
 	}
 
+	// sort Ingresses using the CreationTimestamp field
+	sort.SliceStable(ingresses, func(i, j int) bool {
+		ir := ingresses[i].CreationTimestamp
+		jr := ingresses[j].CreationTimestamp
+		return ir.Before(&jr)
+	})
+
 	return ingresses
 }
 
@@ -832,9 +862,9 @@ func (s *k8sStore) Run(stopCh chan struct{}) {
 	}
 }
 
-// ListControllerPods returns a list of ingress-nginx controller Pods
-func (s *k8sStore) ListControllerPods() []*corev1.Pod {
-	var pods []*corev1.Pod
+// GetRunningControllerPodsCount returns the number of Running ingress-nginx controller Pods
+func (s k8sStore) GetRunningControllerPodsCount() int {
+	count := 0
 
 	for _, i := range s.listers.Pod.List() {
 		pod := i.(*corev1.Pod)
@@ -843,8 +873,8 @@ func (s *k8sStore) ListControllerPods() []*corev1.Pod {
 			continue
 		}
 
-		pods = append(pods, pod)
+		count++
 	}
 
-	return pods
+	return count
 }

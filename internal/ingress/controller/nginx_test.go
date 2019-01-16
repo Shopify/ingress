@@ -22,6 +22,8 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -205,8 +207,9 @@ func TestConfigureDynamically(t *testing.T) {
 	}}
 
 	commonConfig := &ingress.Configuration{
-		Backends: backends,
-		Servers:  servers,
+		Backends:            backends,
+		Servers:             servers,
+		ControllerPodsCount: 2,
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -221,12 +224,26 @@ func TestConfigureDynamically(t *testing.T) {
 			t.Fatal(err)
 		}
 		body := string(b)
-		if strings.Contains(body, "target") {
-			t.Errorf("unexpected target reference in JSON content: %v", body)
-		}
 
-		if !strings.Contains(body, "service") {
-			t.Errorf("service reference should be present in JSON content: %v", body)
+		switch r.URL.Path {
+		case "/configuration/backends":
+			{
+				if strings.Contains(body, "target") {
+					t.Errorf("unexpected target reference in JSON content: %v", body)
+				}
+
+				if !strings.Contains(body, "service") {
+					t.Errorf("service reference should be present in JSON content: %v", body)
+				}
+			}
+		case "/configuration/general":
+			{
+				if !strings.Contains(body, "controllerPodsCount") {
+					t.Errorf("controllerPodsCount should be present in JSON content: %v", body)
+				}
+			}
+		default:
+			t.Errorf("unknown request to %s", r.URL.Path)
 		}
 
 	}))
@@ -387,5 +404,60 @@ func TestNextPowerOf2(t *testing.T) {
 	actual = nextPowerOf2(-2)
 	if actual != 0 {
 		t.Errorf("TestNextPowerOf2: expected %d but returned %d.", 0, actual)
+	}
+}
+
+func TestCleanTempNginxCfg(t *testing.T) {
+	err := cleanTempNginxCfg()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tmpfile, err := ioutil.TempFile("", tempNginxPattern)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tmpfile.Close()
+
+	dur, err := time.ParseDuration("-10m")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	oldTime := time.Now().Add(dur)
+	err = os.Chtimes(tmpfile.Name(), oldTime, oldTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tmpfile, err = ioutil.TempFile("", tempNginxPattern)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tmpfile.Close()
+
+	err = cleanTempNginxCfg()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var files []string
+
+	err = filepath.Walk(os.TempDir(), func(path string, info os.FileInfo, err error) error {
+		if info.IsDir() && os.TempDir() != path {
+			return filepath.SkipDir
+		}
+
+		if strings.HasPrefix(info.Name(), tempNginxPattern) {
+			files = append(files, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(files) != 1 {
+		t.Errorf("expected one file but %d were found", len(files))
 	}
 }
