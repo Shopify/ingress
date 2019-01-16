@@ -35,6 +35,11 @@ trap on_exit EXIT
 sed "s@\${NAMESPACE}@${NAMESPACE}@" $DIR/../manifests/ingress-controller/mandatory.yaml | kubectl apply --namespace=$NAMESPACE -f -
 cat $DIR/../manifests/ingress-controller/service-nodeport.yaml | kubectl apply --namespace=$NAMESPACE -f -
 
+sleep 30
+
+kubectl describe pod -l app.kubernetes.io/name=ingress-nginx -n $NAMESPACE
+kubectl logs -l app.kubernetes.io/name=ingress-nginx -n $NAMESPACE
+
 # wait for the deployment and fail if there is an error before starting the execution of any test
 kubectl rollout status \
     --request-timeout=3m \
