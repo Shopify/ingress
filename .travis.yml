@@ -25,7 +25,7 @@ env:
   - DOCKER=docker
   - SKIP_SNAPSHOT=true
   - NODE_IP=10.192.0.3
-  - E2E_NODES=6
+  - E2E_NODES=1
   - GH_REF=github.com/kubernetes/ingress-nginx
 
 branches:
