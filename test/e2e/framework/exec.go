@@ -66,7 +66,9 @@ func (f *Framework) ExecCommand(pod *v1.Pod, command string) (string, error) {
 func (f *Framework) NewIngressController(namespace string) error {
 	// Creates an nginx deployment
 	cmd := exec.Command("./wait-for-nginx.sh", namespace)
+	Logf("XIYAR: executed ./wait-for-nginx.sh in %s", namespace)
 	out, err := cmd.CombinedOutput()
+	Logf("XIYAR: collected output of ./wait-for-nginx.sh in %s", namespace)
 	if err != nil {
 		return fmt.Errorf("Unexpected error waiting for ingress controller deployment: %v.\nLogs:\n%v", err, string(out))
 	}

@@ -41,6 +41,9 @@ fi
 
 SCRIPT_ROOT=$(dirname ${BASH_SOURCE})/..
 
+kubectl create ns xiyar-test
+bash ./test/e2e/wait-for-nginx.sh xiyar-test
+
 ginkgo build ./test/e2e
 
 exec --                                      \
