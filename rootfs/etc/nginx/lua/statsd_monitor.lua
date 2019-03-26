@@ -33,7 +33,8 @@ local function send_response_data(upstream_state, client_state)
   statsd.increment('ingress.nginx.client.response', 1, {
     status=client_state.status,
     status_class=status_class,
-    upstream_name=client_state.upstream_name
+    upstream_name=client_state.upstream_name,
+    scheme=client_state.scheme
   })
 
   statsd.histogram('ingress.nginx.client.request_time', client_state.request_time, {
@@ -64,7 +65,8 @@ function _M.call()
     }, {
       status=ngx.var.status,
       request_time=ngx.var.request_time,
-      upstream_name=ngx.var.proxy_upstream_name
+      upstream_name=ngx.var.proxy_upstream_name,
+      scheme=ngx.var.pass_access_scheme
     })
 
   if err then
