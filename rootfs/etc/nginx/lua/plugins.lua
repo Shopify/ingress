@@ -10,25 +10,11 @@ local MAX_NUMBER_OF_PLUGINS = 10000
 local plugins = new_tab(MAX_NUMBER_OF_PLUGINS, 0)
 
 local function load_plugin(name)
-  local path = string_format("plugins.%s.handler", name)
-  ngx_log(ngx.WARN, "xiyar: ", path)
+  local path = string_format("plugins.%s.main", name)
 
   local plugin = require(path)
-  -- TODO: check for nil here
-  ngx_log(ngx.WARN, "xiyar: ", tostring(plugin))
 
   plugins[name] = plugin
-end
-
-function run_plugin(name)
-  local plugin = plugins[name]
-
-  ngx_log(INFO, string_format("Running plugin \"%s\"", name))
-  -- TODO: consider sandboxing this, should we?
-  local ok, err = pcall(plugin.call)
-  if not ok then
-    ngx_log(ERR, string_format("Error while running plugin \"%s\": %s", name, err))
-  end
 end
 
 function _M.init(names)
@@ -37,9 +23,20 @@ function _M.init(names)
   end
 end
 
-function _M.run(names)
-  for _, name in ipairs(names) do
-    run_plugin(name)
+function _M.run()
+  local phase = ngx.get_phase()
+
+  for name, plugin in pairs(plugins) do
+    if plugin[phase] then
+      ngx_log(INFO, string_format("Running plugin \"%s\" in phase \"%s\"", name, phase))
+
+      -- TODO: consider sandboxing this, should we?
+      -- probably yes, at least prohibit plugin from accessing env vars etc
+      local ok, err = pcall(plugin[phase])
+      if not ok then
+        ngx_log(ERR, string_format("Error while running plugin \"%s\" in phase \"%s\": %s", name, phase, err))
+      end
+    end
   end
 end
 

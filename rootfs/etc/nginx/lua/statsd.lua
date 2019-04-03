@@ -168,7 +168,7 @@ _M.config = {
 }
 
 if not _M.config.host or not _M.config.port then
-  error("STATSD_HOST and STATSD_PORT env variables must be set")
+  ngx.log(ngx.WARN, "STATSD_HOST and STATSD_PORT env variables must be set")
 end
 
 if _M.config.tags then

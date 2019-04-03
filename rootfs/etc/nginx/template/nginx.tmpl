@@ -133,6 +133,8 @@ http {
         {{ if $all.EnableMetrics }}
         monitor.init_worker()
         {{ end }}
+
+        plugins.run()
     }
 
     {{/* Enable the real_ip module only if we use either X-Forwarded headers or Proxy Protocol. */}}
@@ -1001,7 +1003,7 @@ stream {
                 lua_ingress.rewrite({{ locationConfigForLua $location $server $all }})
                 balancer.rewrite()
 
-                plugins.run({ "hello_world" })
+                plugins.run()
             }
 
             {{ if shouldConfigureLuaRestyWAF $all.Cfg.DisableLuaRestyWAF $location.LuaRestyWAF.Mode }}
@@ -1047,6 +1049,8 @@ stream {
                 {{ end }}
 
                 waf:exec()
+
+                plugins.run()
             }
             {{ end }}
 
@@ -1056,6 +1060,8 @@ stream {
                 local waf = lua_resty_waf:new()
                 waf:exec()
                 {{ end }}
+
+                plugins.run()
             }
             body_filter_by_lua_block {
                 {{ if shouldConfigureLuaRestyWAF $all.Cfg.DisableLuaRestyWAF $location.LuaRestyWAF.Mode }}
@@ -1063,6 +1069,8 @@ stream {
                 local waf = lua_resty_waf:new()
                 waf:exec()
                 {{ end }}
+
+                plugins.run()
             }
 
             log_by_lua_block {
@@ -1076,6 +1084,8 @@ stream {
                 monitor.call()
                 {{ end }}
                 statsd_monitor.call()
+
+                plugins.run()
             }
 
             {{ if (and (not (empty $server.SSLCert.PemFileName)) $all.Cfg.HSTS) }}
