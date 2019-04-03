@@ -109,6 +109,15 @@ http {
         end
         {{ end }}
 
+        ok, res = pcall(require, "plugins")
+        if not ok then
+          error("require failed: " .. tostring(res))
+        else
+          plugins = res
+        end
+        -- load all plugins that'll be used here
+        plugins.init({ "hello_world" })
+
         ok, res = pcall(require, "statsd_monitor")
         if not ok then
           error("require(statsd_monitor) failed: " .. tostring(res))
@@ -991,6 +1000,8 @@ stream {
             rewrite_by_lua_block {
                 lua_ingress.rewrite({{ locationConfigForLua $location $server $all }})
                 balancer.rewrite()
+
+                plugins.run({ "hello_world" })
             }
 
             {{ if shouldConfigureLuaRestyWAF $all.Cfg.DisableLuaRestyWAF $location.LuaRestyWAF.Mode }}
