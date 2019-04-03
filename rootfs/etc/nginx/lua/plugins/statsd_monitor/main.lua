@@ -1,6 +1,9 @@
-local statsd = require('statsd')
+-- TODO(elvinefendi) plugins should not be able to require any module
 local defer_to_timer = require("defer_to_timer")
 local split = require("util.split")
+
+-- TODO(elvinefendi) introduce a helper function to require plugin modules
+local statsd = require('plugins.statsd_monitor.statsd')
 
 local _M = {}
 
@@ -41,7 +44,7 @@ local function send_response_data(upstream_state, client_state)
   })
 end
 
-function _M.call()
+function _M.log()
   local status, status_err = split.split_upstream_var(ngx.var.upstream_status)
   if status_err then
     return nil, status_err
