@@ -127,6 +127,7 @@ func NewNGINXController(config *Configuration, mc metric.Collector, fs file.File
 		config.DefaultSSLCertificate,
 		config.ResyncPeriod,
 		config.Client,
+		config.PluginClient,
 		fs,
 		n.updateCh,
 		config.DynamicCertificatesEnabled,

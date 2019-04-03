@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	clientset "k8s.io/client-go/kubernetes"
+	pluginclientset "k8s.io/ingress-nginx/pkg/client/clientset/versioned"
 
 	"k8s.io/ingress-nginx/internal/ingress"
 	"k8s.io/ingress-nginx/internal/ingress/annotations"
@@ -52,6 +53,7 @@ type Configuration struct {
 	APIServerHost  string
 	KubeConfigFile string
 	Client         clientset.Interface
+	PluginClient   pluginclientset.Interface
 
 	ResyncPeriod time.Duration
 

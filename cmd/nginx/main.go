@@ -36,6 +36,7 @@ import (
 	discovery "k8s.io/apimachinery/pkg/version"
 	"k8s.io/apiserver/pkg/server/healthz"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
@@ -45,6 +46,8 @@ import (
 	"k8s.io/ingress-nginx/internal/k8s"
 	"k8s.io/ingress-nginx/internal/net/ssl"
 	"k8s.io/ingress-nginx/version"
+
+	pluginclientset "k8s.io/ingress-nginx/pkg/client/clientset/versioned"
 )
 
 const (
@@ -82,6 +85,11 @@ func main() {
 	}
 
 	kubeClient, err := createApiserverClient(conf.APIServerHost, conf.KubeConfigFile)
+	if err != nil {
+		handleFatalInitError(err)
+	}
+
+	ingressNginxPluginClient, err := createApiserverPluginClient(conf.APIServerHost, conf.KubeConfigFile)
 	if err != nil {
 		handleFatalInitError(err)
 	}
@@ -125,6 +133,7 @@ func main() {
 	// end create default fake SSL certificates
 
 	conf.Client = kubeClient
+	conf.PluginClient = ingressNginxPluginClient
 
 	reg := prometheus.NewRegistry()
 
@@ -193,6 +202,60 @@ func handleSigterm(ngx *controller.NGINXController, exit exiter) {
 // controller runs inside Kubernetes and fallback to the in-cluster config. If
 // the in-cluster config is missing or fails, we fallback to the default config.
 func createApiserverClient(apiserverHost, kubeConfig string) (*kubernetes.Clientset, error) {
+	cfg, err := createClientConfig(apiserverHost, kubeConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	var v *discovery.Info
+
+	// The client may fail to connect to the API server in the first request.
+	// https://github.com/kubernetes/ingress-nginx/issues/1968
+	defaultRetry := wait.Backoff{
+		Steps:    10,
+		Duration: 1 * time.Second,
+		Factor:   1.5,
+		Jitter:   0.1,
+	}
+
+	var lastErr error
+	retries := 0
+	klog.V(2).Info("Trying to discover Kubernetes version")
+	err = wait.ExponentialBackoff(defaultRetry, func() (bool, error) {
+		v, err = client.Discovery().ServerVersion()
+
+		if err == nil {
+			return true, nil
+		}
+
+		lastErr = err
+		klog.V(2).Infof("Unexpected error discovering Kubernetes version (attempt %v): %v", retries, err)
+		retries++
+		return false, nil
+	})
+
+	// err is returned in case of timeout in the exponential backoff (ErrWaitTimeout)
+	if err != nil {
+		return nil, lastErr
+	}
+
+	// this should not happen, warn the user
+	if retries > 0 {
+		klog.Warningf("Initial connection to the Kubernetes API server was retried %d times.", retries)
+	}
+
+	klog.Infof("Running in Kubernetes cluster version v%v.%v (%v) - git (%v) commit %v - platform %v",
+		v.Major, v.Minor, v.GitVersion, v.GitTreeState, v.GitCommit, v.Platform)
+
+	return client, nil
+}
+
+func createClientConfig(apiserverHost, kubeConfig string) (*rest.Config, error) {
 	cfg, err := clientcmd.BuildConfigFromFlags(apiserverHost, kubeConfig)
 	if err != nil {
 		return nil, err
@@ -204,7 +267,17 @@ func createApiserverClient(apiserverHost, kubeConfig string) (*kubernetes.Client
 
 	klog.Infof("Creating API client for %s", cfg.Host)
 
-	client, err := kubernetes.NewForConfig(cfg)
+	return cfg, nil
+
+}
+
+func createApiserverPluginClient(apiserverHost, kubeConfig string) (*pluginclientset.Clientset, error) {
+	cfg, err := createClientConfig(apiserverHost, kubeConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := pluginclientset.NewForConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
