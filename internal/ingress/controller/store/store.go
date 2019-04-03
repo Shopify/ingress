@@ -41,6 +41,7 @@ import (
 	clientcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
+	pluginclientset "k8s.io/ingress-nginx/pkg/client/clientset/versioned"
 	"k8s.io/klog"
 
 	"k8s.io/ingress-nginx/internal/file"
@@ -54,6 +55,8 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/errors"
 	"k8s.io/ingress-nginx/internal/ingress/resolver"
 	"k8s.io/ingress-nginx/internal/k8s"
+	inp "k8s.io/ingress-nginx/pkg/apis/ingressnginxplugin/v1alpha1"
+	inpinformer "k8s.io/ingress-nginx/pkg/client/informers/externalversions/ingressnginxplugin/v1alpha1"
 )
 
 // Storer is the interface that wraps the required methods to gather information
@@ -64,6 +67,9 @@ type Storer interface {
 
 	// GetConfigMap returns the ConfigMap matching key.
 	GetConfigMap(key string) (*corev1.ConfigMap, error)
+
+	// GetIngressNginxPlugin returns the IngressNginxPlugin matching key.
+	GetIngressNginxPlugin(key string) (*inp.IngressNginxPlugin, error)
 
 	// GetSecret returns the Secret matching key.
 	GetSecret(key string) (*corev1.Secret, error)
@@ -120,17 +126,19 @@ type Event struct {
 
 // Informer defines the required SharedIndexInformers that interact with the API server.
 type Informer struct {
-	Ingress   cache.SharedIndexInformer
-	Endpoint  cache.SharedIndexInformer
-	Service   cache.SharedIndexInformer
-	Secret    cache.SharedIndexInformer
-	ConfigMap cache.SharedIndexInformer
-	Pod       cache.SharedIndexInformer
+	Ingress            cache.SharedIndexInformer
+	Endpoint           cache.SharedIndexInformer
+	IngressNginxPlugin cache.SharedIndexInformer
+	Service            cache.SharedIndexInformer
+	Secret             cache.SharedIndexInformer
+	ConfigMap          cache.SharedIndexInformer
+	Pod                cache.SharedIndexInformer
 }
 
 // Lister contains object listers (stores).
 type Lister struct {
 	Ingress               IngressLister
+	IngressNginxPlugin    IngressNginxPluginLister
 	Service               ServiceLister
 	Endpoint              EndpointLister
 	Secret                SecretLister
@@ -150,6 +158,9 @@ func (e NotExistsError) Error() string {
 // Run initiates the synchronization of the informers against the API server.
 func (i *Informer) Run(stopCh chan struct{}) {
 	go i.Endpoint.Run(stopCh)
+	klog.Infof("ABOUT TO RUN Plugin INFORMER")
+	go i.IngressNginxPlugin.Run(stopCh)
+	klog.Infof("RAN Plugin INFORMER")
 	go i.Service.Run(stopCh)
 	go i.Secret.Run(stopCh)
 	go i.ConfigMap.Run(stopCh)
@@ -159,6 +170,7 @@ func (i *Informer) Run(stopCh chan struct{}) {
 	// from the queue
 	if !cache.WaitForCacheSync(stopCh,
 		i.Endpoint.HasSynced,
+		i.IngressNginxPlugin.HasSynced,
 		i.Service.HasSynced,
 		i.Secret.HasSynced,
 		i.ConfigMap.HasSynced,
@@ -230,6 +242,7 @@ func New(checkOCSP bool,
 	namespace, configmap, tcp, udp, defaultSSLCertificate string,
 	resyncPeriod time.Duration,
 	client clientset.Interface,
+	pluginClient pluginclientset.Interface,
 	fs file.Filesystem,
 	updateCh *channels.RingChannel,
 	isDynamicCertificatesEnabled bool,
@@ -285,6 +298,9 @@ func New(checkOCSP bool,
 
 	store.informers.Service = infFactory.Core().V1().Services().Informer()
 	store.listers.Service.Store = store.informers.Service.GetStore()
+
+	store.informers.IngressNginxPlugin = inpinformer.NewIngressNginxPluginInformer(pluginClient, namespace, resyncPeriod, cache.Indexers{})
+	store.listers.IngressNginxPlugin.Store = store.informers.IngressNginxPlugin.GetStore()
 
 	labelSelector := labels.SelectorFromSet(store.pod.Labels)
 	store.informers.Pod = cache.NewSharedIndexInformer(
@@ -599,10 +615,39 @@ func New(checkOCSP bool,
 		},
 	}
 
+	pluginEventHandler := cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			klog.Infof("APluginAddition!!!")
+			updateCh.In() <- Event{
+				Type: CreateEvent,
+				Obj:  obj,
+			}
+		},
+		DeleteFunc: func(obj interface{}) {
+			klog.Infof("APluginDELETION!!!")
+			updateCh.In() <- Event{
+				Type: DeleteEvent,
+				Obj:  obj,
+			}
+		},
+		UpdateFunc: func(old, cur interface{}) {
+			oep := old.(*inp.IngressNginxPlugin)
+			cep := cur.(*inp.IngressNginxPlugin)
+			if !reflect.DeepEqual(oep, cep) {
+				klog.Infof("APluginCHANGE!!!")
+				updateCh.In() <- Event{
+					Type: UpdateEvent,
+					Obj:  cur,
+				}
+			}
+		},
+	}
+
 	store.informers.Ingress.AddEventHandler(ingEventHandler)
 	store.informers.Endpoint.AddEventHandler(epEventHandler)
 	store.informers.Secret.AddEventHandler(secrEventHandler)
 	store.informers.ConfigMap.AddEventHandler(cmEventHandler)
+	store.informers.IngressNginxPlugin.AddEventHandler(pluginEventHandler)
 	store.informers.Service.AddEventHandler(cache.ResourceEventHandlerFuncs{})
 	store.informers.Pod.AddEventHandler(podEventHandler)
 
@@ -723,6 +768,11 @@ func (s *k8sStore) syncSecrets(ing *extensions.Ingress) {
 	for _, secrKey := range s.secretIngressMap.ReferencedBy(key) {
 		s.syncSecret(secrKey)
 	}
+}
+
+// GetIngressNginxPlugin returns the IngressNginxPlugin matching key.
+func (s *k8sStore) GetIngressNginxPlugin(key string) (*inp.IngressNginxPlugin, error) {
+	return s.listers.IngressNginxPlugin.ByKey(key)
 }
 
 // GetSecret returns the Secret matching key.
