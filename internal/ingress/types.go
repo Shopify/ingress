@@ -74,6 +74,9 @@ type Configuration struct {
 
 	// ControllerPodsCount contains the list of running ingress controller Pod(s)
 	ControllerPodsCount int `json:"controllerPodsCount,omitempty"`
+
+	// Plugins are the ingress-nginx plugins to load
+	Plugins []Plugin `json:"plugins"`
 }
 
 // Backend describes one or more remote server/s (endpoints) associated with a service
@@ -167,6 +170,13 @@ type Endpoint struct {
 	Port string `json:"port"`
 	// Target returns a reference to the object providing the endpoint
 	Target *apiv1.ObjectReference `json:"target,omitempty"`
+}
+
+// Plugin describes a single ingress-nginx plugin
+type Plugin struct {
+	Archive   string `json:"archive"`
+	SHA256Sum string `json:"sha256sum"`
+	Name      string `json:"name"`
 }
 
 // Server describes a website

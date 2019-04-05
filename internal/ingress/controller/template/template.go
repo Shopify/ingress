@@ -312,17 +312,15 @@ func locationConfigForLua(l interface{}, s interface{}, a interface{}) string {
 }
 
 // buildLuaPluginsList returns a Lua table of plugins to be enabled fortmatted as string
-func buildLuaPluginsList(input interface{}) string {
-	builtinPlugins, ok := input.([]string)
-	if !ok {
-		klog.Errorf("expected a '[]string' type but %T was given", builtinPlugins)
-		return "{}"
-	}
-
+func buildLuaPluginsList(builtinPlugins []string, userPlugins []ingress.Plugin) string {
 	formattedNames := make([]string, len(builtinPlugins))
 	for i, rawName := range builtinPlugins {
 		name := strings.TrimSpace(rawName)
 		formattedNames[i] = fmt.Sprintf("\"%s\"", name)
+	}
+
+	for _, plugin := range userPlugins {
+		formattedNames = append(formattedNames, fmt.Sprintf("\"%s\"", plugin.Name))
 	}
 
 	return fmt.Sprintf("{%s}", strings.Join(formattedNames, ", "))

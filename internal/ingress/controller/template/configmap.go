@@ -17,6 +17,7 @@ limitations under the License.
 package template
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"strconv"
@@ -29,6 +30,7 @@ import (
 	"github.com/mitchellh/mapstructure"
 
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/ingress-nginx/internal/ingress"
 	"k8s.io/ingress-nginx/internal/ingress/controller/config"
 	ing_net "k8s.io/ingress-nginx/internal/net"
 	"k8s.io/ingress-nginx/internal/runtime"
@@ -50,6 +52,7 @@ const (
 	nginxStatusIpv6Whitelist = "nginx-status-ipv6-whitelist"
 	proxyHeaderTimeout       = "proxy-protocol-header-timeout"
 	workerProcesses          = "worker-processes"
+	plugins                  = "plugins"
 )
 
 var (
@@ -204,6 +207,15 @@ func ReadConfig(src map[string]string) config.Configuration {
 		delete(conf, workerProcesses)
 	}
 
+	pluginsList := make([]ingress.Plugin, 0)
+	if pluginsJSON, ok := conf[plugins]; ok {
+		err := json.Unmarshal([]byte(pluginsJSON), &pluginsList)
+		if err != nil {
+			klog.Errorf("failed to unmarshal plugin JSON: %v", err)
+		}
+		delete(conf, plugins)
+	}
+
 	to.CustomHTTPErrors = filterErrors(errors)
 	to.SkipAccessLogURLs = skipUrls
 	to.WhitelistSourceRange = whiteList
@@ -217,6 +229,7 @@ func ReadConfig(src map[string]string) config.Configuration {
 	to.HideHeaders = hideHeadersList
 	to.ProxyStreamResponses = streamResponses
 	to.DisableIpv6DNS = !ing_net.IsIPv6Enabled()
+	to.Plugins = pluginsList
 
 	config := &mapstructure.DecoderConfig{
 		Metadata:         nil,

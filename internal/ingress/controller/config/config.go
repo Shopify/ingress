@@ -276,6 +276,9 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_core_module.html#server_names_hash_bucket_size
 	ServerNameHashBucketSize int `json:"server-name-hash-bucket-size,omitempty"`
 
+	// A JSON array of lua plugin definitions to be executed for each request
+	Plugins []ingress.Plugin `json:"plugins,omitempty"`
+
 	// Size of the bucket for the proxy headers hash tables
 	// http://nginx.org/en/docs/hash.html
 	// https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_headers_hash_max_size
@@ -649,6 +652,7 @@ func NewDefault() Configuration {
 		MapHashBucketSize:                64,
 		NginxStatusIpv4Whitelist:         defNginxStatusIpv4Whitelist,
 		NginxStatusIpv6Whitelist:         defNginxStatusIpv6Whitelist,
+		Plugins:                          make([]ingress.Plugin, 0),
 		ProxyRealIPCIDR:                  defIPCIDR,
 		ProxyProtocolHeaderTimeout:       defProxyDeadlineDuration,
 		ServerNameHashMaxSize:            1024,
