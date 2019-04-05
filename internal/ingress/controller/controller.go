@@ -18,11 +18,12 @@ package controller
 
 import (
 	"fmt"
-	"k8s.io/ingress-nginx/internal/ingress/annotations/log"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"k8s.io/ingress-nginx/internal/ingress/annotations/log"
 
 	"github.com/mitchellh/hashstructure"
 	"k8s.io/klog"
@@ -38,6 +39,7 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/annotations"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/proxy"
 	ngx_config "k8s.io/ingress-nginx/internal/ingress/controller/config"
+	"k8s.io/ingress-nginx/internal/ingress/controller/plugin"
 	"k8s.io/ingress-nginx/internal/k8s"
 )
 
@@ -108,6 +110,27 @@ func (n NGINXController) GetPublishService() *apiv1.Service {
 	return s
 }
 
+// FetchChangedPlugins tries to download every plugin that didn't previously exist
+func (n *NGINXController) FetchChangedPlugins() {
+	oldPlugins := n.runningConfig.Plugins
+
+	for _, pNew := range n.store.GetBackendConfiguration().Plugins {
+		found := false
+		for _, pOld := range oldPlugins {
+			if pNew.Equal(pOld) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			err := plugin.Setup(pNew)
+			if err != nil {
+				klog.Errorf("error fetching plugin: %v", err)
+			}
+		}
+	}
+}
+
 // syncIngress collects all the pieces required to assemble the NGINX
 // configuration file and passes the resulting data structures to the backend
 // (OnUpdate) when a reload is deemed necessary.
@@ -160,6 +183,7 @@ func (n *NGINXController) syncIngress(interface{}) error {
 		PassthroughBackends:   passUpstreams,
 		BackendConfigChecksum: n.store.GetBackendConfiguration().Checksum,
 		ControllerPodsCount:   n.store.GetRunningControllerPodsCount(),
+		Plugins:               n.store.GetBackendConfiguration().Plugins,
 	}
 
 	if n.runningConfig.Equal(pcfg) {
@@ -169,6 +193,8 @@ func (n *NGINXController) syncIngress(interface{}) error {
 
 	if !n.IsDynamicConfigurationEnough(pcfg) {
 		klog.Infof("Configuration changes detected, backend reload required.")
+
+		n.FetchChangedPlugins()
 
 		hash, _ := hashstructure.Hash(pcfg, &hashstructure.HashOptions{
 			TagName: "json",

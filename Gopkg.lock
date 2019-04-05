@@ -2,9 +2,17 @@
 
 
 [[projects]]
-  digest = "1:4d6f036ea3fe636bcb2e89850bcdc62a771354e157cd51b8b22a2de8562bf663"
+  digest = "1:2b2dd370d2e40f72a622dfecefcf668cca701b4a31a2119355bc3166fb863280"
   name = "cloud.google.com/go"
-  packages = ["compute/metadata"]
+  packages = [
+    "compute/metadata",
+    "iam",
+    "internal",
+    "internal/optional",
+    "internal/trace",
+    "internal/version",
+    "storage",
+  ]
   pruneopts = "NUT"
   revision = "458e1f376a2b44413160b5d301183b65debaa3f6"
   version = "v0.37.2"
@@ -278,6 +286,14 @@
   pruneopts = "NUT"
   revision = "0cd6bf5da1e1c83f8b45653022c74f71af0538a4"
   version = "v1.1.1"
+
+[[projects]]
+  digest = "1:fa300677001e58a995e10afe4e251d2a6e30d3815a234d553b5810db7795d5a2"
+  name = "github.com/googleapis/gax-go"
+  packages = ["v2"]
+  pruneopts = "NUT"
+  revision = "beaecbbdd8af86aa3acf14180d53828ce69400b2"
+  version = "v2.0.4"
 
 [[projects]]
   digest = "1:06a7dadb7b760767341ffb6c8d377238d68a1226f2b21b5d497d2e3f6ecf6b4e"
@@ -820,9 +836,21 @@
   revision = "9d24e82272b4f38b78bc8cff74fa936d31ccd8ef"
 
 [[projects]]
-  digest = "1:5f003878aabe31d7f6b842d4de32b41c46c214bb629bb485387dbcce1edf5643"
+  digest = "1:7fd6c71a045d1d86611269f3c0c61e1e2c7cc71e4933e62129220999c2edfca7"
   name = "google.golang.org/api"
-  packages = ["support/bundler"]
+  packages = [
+    "gensupport",
+    "googleapi",
+    "googleapi/internal/uritemplates",
+    "googleapi/transport",
+    "internal",
+    "iterator",
+    "option",
+    "storage/v1",
+    "support/bundler",
+    "transport/http",
+    "transport/http/internal/propagation",
+  ]
   pruneopts = "NUT"
   revision = "bce707a4d0ea3488942724b3bcc1c8338f38f991"
   version = "v0.3.0"
@@ -848,10 +876,13 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:5dc13cd8c0b417e12d187938d2ccb2348dda90f6d3d4a3d8402a40677a5ac982"
+  digest = "1:ce3bcba397a6fc8f947baef788abd9822e9d995c97871b27b3566066c8d2294b"
   name = "google.golang.org/genproto"
   packages = [
+    "googleapis/api/annotations",
     "googleapis/api/httpbody",
+    "googleapis/iam/v1",
+    "googleapis/rpc/code",
     "googleapis/rpc/status",
     "protobuf/field_mask",
   ]
@@ -1417,6 +1448,7 @@
   analyzer-name = "dep"
   analyzer-version = 1
   input-imports = [
+    "cloud.google.com/go/storage",
     "github.com/armon/go-proxyproto",
     "github.com/eapache/channels",
     "github.com/imdario/mergo",

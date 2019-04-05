@@ -80,6 +80,40 @@ func (c1 *Configuration) Equal(c2 *Configuration) bool {
 		return false
 	}
 
+	if len(c1.Plugins) != len(c2.Plugins) {
+		return false
+	}
+
+	for _, p1 := range c1.Plugins {
+		found := false
+		for _, p2 := range c2.Plugins {
+			if p1.Equal(p2) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	return true
+}
+
+// Equal tests for equality between two Plugin types
+func (p1 Plugin) Equal(p2 Plugin) bool {
+	if p1.Name != p2.Name {
+		return false
+	}
+
+	if p1.SHA256Sum != p2.SHA256Sum {
+		return false
+	}
+
+	if p1.Archive != p2.Archive {
+		return false
+	}
+
 	return true
 }
 
