@@ -264,6 +264,7 @@ func registerHandlers(n *controller.NGINXController, mux *http.ServeMux) {
 		w.WriteHeader(http.StatusOK)
 
 		n.ShouldFailExternalHealthCheck = true
+		time.Sleep(30 * time.Second)
 
 		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
 		w.Write(b)
