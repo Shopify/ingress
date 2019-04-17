@@ -247,7 +247,8 @@ type NGINXController struct {
 
 	isIPV6Enabled bool
 
-	isShuttingDown bool
+	isShuttingDown                bool
+	ShouldFailExternalHealthCheck bool
 
 	Proxy *TCPProxy
 

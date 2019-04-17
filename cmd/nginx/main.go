@@ -24,6 +24,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -44,6 +45,7 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/metric"
 	"k8s.io/ingress-nginx/internal/k8s"
 	"k8s.io/ingress-nginx/internal/net/ssl"
+	"k8s.io/ingress-nginx/internal/nginx"
 	"k8s.io/ingress-nginx/version"
 )
 
@@ -142,7 +144,7 @@ func main() {
 
 	registerHealthz(ngx, mux)
 	registerMetrics(reg, mux)
-	registerHandlers(mux)
+	registerHandlers(ngx, mux)
 
 	go startHTTPServer(conf.ListenPorts.Health, mux)
 
@@ -248,7 +250,65 @@ func handleFatalInitError(err error) {
 		err)
 }
 
-func registerHandlers(mux *http.ServeMux) {
+func registerHandlers(n *controller.NGINXController, mux *http.ServeMux) {
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+		if n.ShouldFailExternalHealthCheck {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			klog.Info("ping unavailable")
+		} else {
+			failCheck := false
+
+			statusCode, _, err := nginx.NewGetStatusRequest(nginx.HealthPath)
+			if err != nil || statusCode != 200 {
+				klog.Info("nginx health error")
+				failCheck = true
+			}
+
+			if !failCheck {
+				statusCode, _, err = nginx.NewGetStatusRequest("/is-dynamic-lb-initialized")
+				if err != nil || statusCode != 200 {
+					klog.Info("dynamic lb error")
+					failCheck = true
+				}
+			}
+
+			if failCheck {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				klog.Info("ping unavailable")
+			} else {
+				w.WriteHeader(http.StatusOK)
+				klog.Info("ping available")
+			}
+		}
+
+		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
+		w.Write(b)
+	})
+
+	mux.HandleFunc("/disable-ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		sleepStr := r.URL.Query()["sleep"][0]
+		sleep, _ := strconv.Atoi(sleepStr)
+
+		klog.Infof("disabling ping and sleeping for %v", sleep)
+		n.ShouldFailExternalHealthCheck = true
+		time.Sleep(time.Duration(sleep) * time.Second)
+		klog.Info("disabled ping")
+
+		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
+		w.Write(b)
+	})
+
+	mux.HandleFunc("/enable-ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		n.ShouldFailExternalHealthCheck = false
+
+		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
+		w.Write(b)
+	})
+
 	mux.HandleFunc("/build", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		b, _ := json.Marshal(version.String())
