@@ -50,7 +50,7 @@ jobs:
         - test/e2e/run.sh
     # split builds to avoid job timeouts
     - stage: publish amd64
-      if: type = push AND branch = master AND repo = Shopify/ingress AND env(COMPONENT) = "ingress-controller"
+      if: repo = Shopify/ingress AND env(COMPONENT) = "ingress-controller"
       script:
         - .travis/publish.sh amd64
     - stage: publish arm
