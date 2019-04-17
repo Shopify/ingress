@@ -142,7 +142,7 @@ func main() {
 
 	registerHealthz(ngx, mux)
 	registerMetrics(reg, mux)
-	registerHandlers(mux)
+	registerHandlers(ngx, mux)
 
 	go startHTTPServer(conf.ListenPorts.Health, mux)
 
@@ -248,7 +248,36 @@ func handleFatalInitError(err error) {
 		err)
 }
 
-func registerHandlers(mux *http.ServeMux) {
+func registerHandlers(n *controller.NGINXController, mux *http.ServeMux) {
+	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
+		if n.ShouldFailExternalHealthCheck {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		} else {
+			w.WriteHeader(http.StatusOK)
+		}
+
+		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
+		w.Write(b)
+	})
+
+	mux.HandleFunc("/disable-ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		n.ShouldFailExternalHealthCheck = true
+
+		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
+		w.Write(b)
+	})
+
+	mux.HandleFunc("/enable-ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+
+		n.ShouldFailExternalHealthCheck = false
+
+		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
+		w.Write(b)
+	})
+
 	mux.HandleFunc("/build", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		b, _ := json.Marshal(version.String())
