@@ -24,6 +24,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -252,8 +253,10 @@ func registerHandlers(n *controller.NGINXController, mux *http.ServeMux) {
 	mux.HandleFunc("/ping", func(w http.ResponseWriter, r *http.Request) {
 		if n.ShouldFailExternalHealthCheck {
 			w.WriteHeader(http.StatusServiceUnavailable)
+			klog.Info("ping unavailable")
 		} else {
 			w.WriteHeader(http.StatusOK)
+			klog.Info("ping available")
 		}
 
 		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
@@ -263,8 +266,13 @@ func registerHandlers(n *controller.NGINXController, mux *http.ServeMux) {
 	mux.HandleFunc("/disable-ping", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 
+		sleepStr := r.URL.Query()["sleep"][0]
+		sleep, _ := strconv.Atoi(sleepStr)
+
+		klog.Infof("disabling ping and sleeping for %v", sleep)
 		n.ShouldFailExternalHealthCheck = true
-		time.Sleep(30 * time.Second)
+		time.Sleep(time.Duration(sleep) * time.Second)
+		klog.Info("disabled ping")
 
 		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
 		w.Write(b)
