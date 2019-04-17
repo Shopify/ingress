@@ -45,6 +45,7 @@ import (
 	"k8s.io/ingress-nginx/internal/ingress/metric"
 	"k8s.io/ingress-nginx/internal/k8s"
 	"k8s.io/ingress-nginx/internal/net/ssl"
+	"k8s.io/ingress-nginx/internal/nginx"
 	"k8s.io/ingress-nginx/version"
 )
 
@@ -255,8 +256,29 @@ func registerHandlers(n *controller.NGINXController, mux *http.ServeMux) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			klog.Info("ping unavailable")
 		} else {
-			w.WriteHeader(http.StatusOK)
-			klog.Info("ping available")
+			failCheck := false
+
+			statusCode, _, err := nginx.NewGetStatusRequest(nginx.HealthPath)
+			if err != nil || statusCode != 200 {
+				klog.Info("nginx health error")
+				failCheck = true
+			}
+
+			if !failCheck {
+				statusCode, _, err = nginx.NewGetStatusRequest("/is-dynamic-lb-initialized")
+				if err != nil || statusCode != 200 {
+					klog.Info("dynamic lb error")
+					failCheck = true
+				}
+			}
+
+			if failCheck {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				klog.Info("ping unavailable")
+			} else {
+				w.WriteHeader(http.StatusOK)
+				klog.Info("ping available")
+			}
 		}
 
 		b, _ := json.Marshal(n.ShouldFailExternalHealthCheck)
