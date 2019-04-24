@@ -71,7 +71,7 @@ const (
 )
 
 var (
-	tmplPath = "/etc/nginx/template/nginx.tmpl"
+	tmplPath = "/nginx-mount.tmpl"
 )
 
 // NewNGINXController creates a new NGINX Ingress controller.

@@ -74,6 +74,7 @@ docker run                                       \
     -v ${PWD}:/go/src/${PKG}                     \
     -v ${PWD}/.gocache:${HOME}/.cache/go-build   \
     -v ${PWD}/bin/${ARCH}:/go/bin/linux_${ARCH}  \
+    -v ${PWD}/rootfs/etc/nginx/template/nginx.tmpl:/nginx-mount.tmpl \
     ${MINIKUBE_VOLUME}                           \
     -w /go/src/${PKG}                            \
     --env-file .env                              \
