@@ -1179,6 +1179,11 @@ func (n *NGINXController) TestSync() string {
 
 	n.isTest = true
 
+	// Allow the store to sync, then stop it from watching
+	stopCh := make(chan struct{})
+	n.store.Run(stopCh)
+	close(n.stopCh)
+
 	n.syncIngress(42)
 
 	return n.confString
