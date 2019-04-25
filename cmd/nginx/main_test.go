@@ -44,10 +44,6 @@ type configTest struct {
 }
 
 func (ct *configTest) GetController() *controller.NGINXController {
-	if ct.clientSet == nil {
-		ct.clientSet = fake.NewSimpleClientset()
-	}
-
 	pod := v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PodName,
@@ -64,8 +60,8 @@ func (ct *configTest) GetController() *controller.NGINXController {
 
 	os.Setenv("POD_NAME", PodName)
 	os.Setenv("POD_NAMESPACE", PodNamespace)
-	// defer os.Setenv("POD_NAME", "")
-	// defer os.Setenv("POD_NAMESPACE", "")
+	defer os.Setenv("POD_NAME", "")
+	defer os.Setenv("POD_NAMESPACE", "")
 
 	ct.t.Logf("%v", ct.args)
 	_, conf, err := readFlags(ct.args)
@@ -83,10 +79,6 @@ func (ct *configTest) GetController() *controller.NGINXController {
 }
 
 func (ct *configTest) AddConfigMap(newConfigMap v1.ConfigMap) {
-	if ct.clientSet == nil {
-		ct.clientSet = fake.NewSimpleClientset()
-	}
-
 	cm, err := ct.clientSet.CoreV1().ConfigMaps(PodNamespace).Create(&newConfigMap)
 	if err != nil {
 		ct.t.Errorf("error creating the configuration map: %v", err)
@@ -95,10 +87,6 @@ func (ct *configTest) AddConfigMap(newConfigMap v1.ConfigMap) {
 }
 
 func (ct *configTest) AddIngress(newIngress v1beta1.Ingress) {
-	if ct.clientSet == nil {
-		ct.clientSet = fake.NewSimpleClientset()
-	}
-
 	ing, err := ct.clientSet.ExtensionsV1beta1().Ingresses(PodNamespace).Create(&newIngress)
 	if err != nil {
 		ct.t.Errorf("error creating the ingress map: %v", err)
@@ -108,7 +96,8 @@ func (ct *configTest) AddIngress(newIngress v1beta1.Ingress) {
 
 func TestUseGeoIP2(t *testing.T) {
 	ct := configTest{
-		t: t,
+		t:         t,
+		clientSet: fake.NewSimpleClientset(),
 	}
 	ct.AddConfigMap(v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -129,7 +118,8 @@ func TestUseGeoIP2(t *testing.T) {
 
 func TestProxyBufferSize(t *testing.T) {
 	ct := configTest{
-		t: t,
+		t:         t,
+		clientSet: fake.NewSimpleClientset(),
 	}
 	ct.AddConfigMap(v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -154,7 +144,7 @@ func TestProxyBufferSize(t *testing.T) {
 						HTTP: &v1beta1.HTTPIngressRuleValue{
 							Paths: []v1beta1.HTTPIngressPath{
 								v1beta1.HTTPIngressPath{
-									Path: "thepath",
+									Path: "/thepath",
 									Backend: v1beta1.IngressBackend{
 										ServiceName: "foo-service",
 										ServicePort: intstr.FromInt(8080),
@@ -176,7 +166,8 @@ func TestProxyBufferSize(t *testing.T) {
 
 func TestHandleSigterm(t *testing.T) {
 	ct := configTest{
-		t: t,
+		t:         t,
+		clientSet: fake.NewSimpleClientset(),
 	}
 	ct.AddConfigMap(v1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{

@@ -67,7 +67,7 @@ if [ ! -d ${MINIKUBE_PATH} ]; then
 fi
 
 docker run                                       \
-    -it                                        \
+    --tty                                        \
     --rm                                         \
     ${DOCKER_OPTS}                               \
     -v ${HOME}/.kube:/${HOME}/.kube              \
@@ -77,7 +77,7 @@ docker run                                       \
     ${MINIKUBE_VOLUME}                           \
     -w /go/src/${PKG}                            \
     --env-file .env                              \
-    --entrypoint /bin/bash                       \
+    --entrypoint ${FLAGS}                        \
     ${E2E_IMAGE}
 
 rm .env
