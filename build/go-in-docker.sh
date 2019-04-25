@@ -67,18 +67,17 @@ if [ ! -d ${MINIKUBE_PATH} ]; then
 fi
 
 docker run                                       \
-    --tty                                        \
+    -it                                        \
     --rm                                         \
     ${DOCKER_OPTS}                               \
     -v ${HOME}/.kube:/${HOME}/.kube              \
     -v ${PWD}:/go/src/${PKG}                     \
     -v ${PWD}/.gocache:${HOME}/.cache/go-build   \
     -v ${PWD}/bin/${ARCH}:/go/bin/linux_${ARCH}  \
-    -v ${PWD}/rootfs/etc/nginx/template/nginx.tmpl:/nginx-mount.tmpl \
     ${MINIKUBE_VOLUME}                           \
     -w /go/src/${PKG}                            \
     --env-file .env                              \
-    --entrypoint ${FLAGS}                        \
+    --entrypoint /bin/bash                       \
     ${E2E_IMAGE}
 
 rm .env

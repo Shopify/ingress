@@ -184,6 +184,10 @@ func (n *NGINXController) syncIngress(interface{}) error {
 			return err
 		}
 
+		if n.isTest {
+			return nil
+		}
+
 		n.metricCollector.SetHosts(hosts)
 
 		klog.Infof("Backend successfully reloaded.")

@@ -71,7 +71,7 @@ const (
 )
 
 var (
-	tmplPath = "/nginx-mount.tmpl"
+	tmplPath = "/etc/nginx/template/nginx.tmpl"
 )
 
 // NewNGINXController creates a new NGINX Ingress controller.
@@ -213,8 +213,15 @@ Error loading new template: %v
 	return n
 }
 
+type testState struct {
+	isTest     bool
+	confString string
+}
+
 // NGINXController describes a NGINX Ingress controller.
 type NGINXController struct {
+	testState
+
 	podInfo *k8s.PodInfo
 
 	cfg *Configuration
@@ -637,7 +644,6 @@ func (n *NGINXController) OnUpdate(ingressCfg ingress.Configuration) error {
 	}
 
 	tc.Cfg.Checksum = ingressCfg.ConfigurationChecksum
-
 	content, err := n.t.Write(tc)
 	if err != nil {
 		return err
@@ -653,6 +659,11 @@ func (n *NGINXController) OnUpdate(ingressCfg ingress.Configuration) error {
 	err = n.testTemplate(content)
 	if err != nil {
 		return err
+	}
+
+	if n.isTest {
+		n.confString = string(content)
+		return nil
 	}
 
 	if klog.V(2) {
@@ -1159,4 +1170,16 @@ func (n *NGINXController) setLeader(leader bool) {
 
 func (n *NGINXController) isLeader() bool {
 	return atomic.LoadUint32(&n.currentLeader) != 0
+}
+
+func (n *NGINXController) TestSync() string {
+	n.cfg.FakeCertificate = ssl.GetFakeSSLCert(n.fileSystem)
+	n.cfg.FakeCertificate.PemFileName = ""
+	n.cfg.FakeCertificate.FullChainPemFileName = ""
+
+	n.isTest = true
+
+	n.syncIngress(42)
+
+	return n.confString
 }
