@@ -47,8 +47,7 @@ func (b *AtomicBool) Store(value bool) {
 
 // Load retreives the value of the atomic bool
 func (b *AtomicBool) Load() bool {
-	v := atomic.LoadInt32(&b.inner)
-	return v == 1
+	return atomic.LoadInt32(&b.inner) == 1
 }
 
 // newUpstream creates an upstream without servers.

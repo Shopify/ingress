@@ -138,12 +138,12 @@ func TestProxyBufferSize(t *testing.T) {
 		},
 		Spec: v1beta1.IngressSpec{
 			Rules: []v1beta1.IngressRule{
-				v1beta1.IngressRule{
+				{
 					Host: "testaddr.local",
 					IngressRuleValue: v1beta1.IngressRuleValue{
 						HTTP: &v1beta1.HTTPIngressRuleValue{
 							Paths: []v1beta1.HTTPIngressPath{
-								v1beta1.HTTPIngressPath{
+								{
 									Path: "/thepath",
 									Backend: v1beta1.IngressBackend{
 										ServiceName: "foo-service",
