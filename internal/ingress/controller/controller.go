@@ -99,7 +99,7 @@ type Configuration struct {
 }
 
 // GetPublishService returns the Service used to set the load-balancer status of Ingresses.
-func (n NGINXController) GetPublishService() *apiv1.Service {
+func (n *NGINXController) GetPublishService() *apiv1.Service {
 	s, err := n.store.GetService(n.cfg.PublishService)
 	if err != nil {
 		return nil

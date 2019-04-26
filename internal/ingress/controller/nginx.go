@@ -214,8 +214,8 @@ Error loading new template: %v
 }
 
 type testState struct {
-	isTest     bool
-	confString string
+	isTest          bool
+	generatedConfCh chan string
 }
 
 // NGINXController describes a NGINX Ingress controller.
@@ -254,7 +254,7 @@ type NGINXController struct {
 
 	isIPV6Enabled bool
 
-	isShuttingDown bool
+	isShuttingDown AtomicBool
 
 	Proxy *TCPProxy
 
@@ -265,6 +265,22 @@ type NGINXController struct {
 	metricCollector metric.Collector
 
 	currentLeader uint32
+}
+
+func (n *NGINXController) GenerateConfiguration() string {
+	n.isTest = true
+	n.generatedConfCh = make(chan string)
+
+	// When running unit tests, the fake certificate file doesn't exist
+	n.cfg.FakeCertificate = ssl.GetFakeSSLCert(n.fileSystem)
+	n.cfg.FakeCertificate.PemFileName = ""
+	n.cfg.FakeCertificate.FullChainPemFileName = ""
+
+	go n.Start()
+	conf := <-n.generatedConfCh
+	n.Stop()
+
+	return conf
 }
 
 // Start starts a new NGINX master process running in the foreground.
@@ -315,8 +331,10 @@ func (n *NGINXController) Start() {
 		n.setupSSLProxy()
 	}
 
-	klog.Info("Starting NGINX process")
-	n.start(cmd)
+	if !n.isTest {
+		klog.Info("Starting NGINX process")
+		n.start(cmd)
+	}
 
 	go n.syncQueue.Run(time.Second, n.stopCh)
 	// force initial sync
@@ -337,7 +355,7 @@ func (n *NGINXController) Start() {
 	for {
 		select {
 		case err := <-n.ngxErrCh:
-			if n.isShuttingDown {
+			if n.isShuttingDown.Load() {
 				break
 			}
 
@@ -359,7 +377,7 @@ func (n *NGINXController) Start() {
 				n.start(cmd)
 			}
 		case event := <-n.updateCh.Out():
-			if n.isShuttingDown {
+			if n.isShuttingDown.Load() {
 				break
 			}
 			if evt, ok := event.(store.Event); ok {
@@ -382,7 +400,7 @@ func (n *NGINXController) Start() {
 
 // Stop gracefully stops the NGINX master process.
 func (n *NGINXController) Stop() error {
-	n.isShuttingDown = true
+	n.isShuttingDown.Store(true)
 
 	n.stopLock.Lock()
 	defer n.stopLock.Unlock()
@@ -396,6 +414,10 @@ func (n *NGINXController) Stop() error {
 	go n.syncQueue.Shutdown()
 	if n.syncStatus != nil {
 		n.syncStatus.Shutdown()
+	}
+
+	if n.isTest {
+		return nil
 	}
 
 	// send stop signal to NGINX
@@ -436,7 +458,7 @@ func (n *NGINXController) start(cmd *exec.Cmd) {
 }
 
 // DefaultEndpoint returns the default endpoint to be use as default server that returns 404.
-func (n NGINXController) DefaultEndpoint() ingress.Endpoint {
+func (n *NGINXController) DefaultEndpoint() ingress.Endpoint {
 	return ingress.Endpoint{
 		Address: "127.0.0.1",
 		Port:    fmt.Sprintf("%v", n.cfg.ListenPorts.Default),
@@ -446,7 +468,7 @@ func (n NGINXController) DefaultEndpoint() ingress.Endpoint {
 
 // testTemplate checks if the NGINX configuration inside the byte array is valid
 // running the command "nginx -t" using a temporal file.
-func (n NGINXController) testTemplate(cfg []byte) error {
+func (n *NGINXController) testTemplate(cfg []byte) error {
 	if len(cfg) == 0 {
 		return fmt.Errorf("invalid NGINX configuration (empty)")
 	}
@@ -662,7 +684,7 @@ func (n *NGINXController) OnUpdate(ingressCfg ingress.Configuration) error {
 	}
 
 	if n.isTest {
-		n.confString = string(content)
+		n.generatedConfCh <- string(content)
 		return nil
 	}
 
@@ -1170,21 +1192,4 @@ func (n *NGINXController) setLeader(leader bool) {
 
 func (n *NGINXController) isLeader() bool {
 	return atomic.LoadUint32(&n.currentLeader) != 0
-}
-
-func (n *NGINXController) TestSync() string {
-	n.cfg.FakeCertificate = ssl.GetFakeSSLCert(n.fileSystem)
-	n.cfg.FakeCertificate.PemFileName = ""
-	n.cfg.FakeCertificate.FullChainPemFileName = ""
-
-	n.isTest = true
-
-	// Allow the store to sync, then stop it from watching
-	stopCh := make(chan struct{})
-	n.store.Run(stopCh)
-	close(n.stopCh)
-
-	n.syncIngress(42)
-
-	return n.confString
 }

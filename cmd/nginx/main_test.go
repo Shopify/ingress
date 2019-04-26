@@ -109,7 +109,7 @@ func TestUseGeoIP2(t *testing.T) {
 	})
 	ct.args = []string{"cmd", "--configmap", PodNamespace + "/fooconfig"}
 
-	conf := ct.GetController().TestSync()
+	conf := ct.GetController().GenerateConfiguration()
 
 	if !strings.Contains(conf, "/etc/nginx/modules/ngx_http_geoip2_module.so") {
 		t.Fatalf("fuck")
@@ -158,7 +158,7 @@ func TestProxyBufferSize(t *testing.T) {
 		},
 	})
 
-	conf := ct.GetController().TestSync()
+	conf := ct.GetController().GenerateConfiguration()
 	if !strings.Contains(conf, "99k") {
 		t.Fatalf(conf)
 	}
