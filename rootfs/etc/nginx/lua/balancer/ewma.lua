@@ -23,18 +23,36 @@ local function decay_ewma(ewma, last_touched_at, rtt, now)
 end
 
 local function get_or_update_ewma(self, upstream, rtt, update)
-  local ewma = self.ewma[upstream] or 0
+  -- TODO(elvinefendi) should we wrap this with a lock around?
+  -- otherwise it is theoretically possible that an another worker updates ewma
+  -- value of upstream after we get ewma value but before we get last_touched_at.
+  -- The worst case is we will decay ewma more.
+  local ewma = ngx.shared.balancer_ewma:get(upstream) or 0
+  local last_touched_at = ngx.shared.balancer_ewma_last_touched_at:get(upstream) or 0
 
   local now = ngx.now()
-  local last_touched_at = self.ewma_last_touched_at[upstream] or 0
   ewma = decay_ewma(ewma, last_touched_at, rtt, now)
 
   if not update then
     return ewma, nil
   end
 
-  self.ewma[upstream] = ewma
-  self.ewma_last_touched_at[upstream] = now
+  local success, err, forcible = ngx.shared.balancer_ewma_last_touched_at:set(upstream, now)
+  if not success then
+    ngx.log(ngx.WARN, "balancer_ewma_last_touched_at:set failed " .. err)
+  end
+  if forcible then
+    ngx.log(ngx.WARN, "balancer_ewma_last_touched_at:set valid items forcibly overwritten")
+  end
+
+  success, err, forcible = ngx.shared.balancer_ewma:set(upstream, ewma)
+  if not success then
+    ngx.log(ngx.WARN, "balancer_ewma:set failed " .. err)
+  end
+  if forcible then
+    ngx.log(ngx.WARN, "balancer_ewma:set valid items forcibly overwritten")
+  end
+
   return ewma, nil
 end
 
@@ -102,21 +120,52 @@ function _M.sync(self, backend)
   self.traffic_shaping_policy = backend.trafficShapingPolicy
   self.alternative_backends = backend.alternativeBackends
 
-  local changed = not util.deep_compare(self.peers, backend.endpoints)
-  if not changed then
-    return
+  -- delete now old endpoints
+  local indexed_new_endpoints = {}
+  for _, endpoint in pairs(backend.endpoints) do
+    local endpoint_string = endpoint.address .. ":" .. endpoint.port
+    indexed_new_endpoints[endpoint_string] = true
+  end
+  for _, endpoint in pairs(self.peers) do
+    local endpoint_string = endpoint.address .. ":" .. endpoint.port
+    if not indexed_new_endpoints[endpoint_string] then
+      ngx.shared.balancer_ewma:delete(endpoint_string)
+      ngx.shared.balancer_ewma_last_touched_at:delete(endpoint_string)
+    end
+  end
+
+  -- Calculate max ewma, and set the ewma of
+  -- newly added endpoints to this value. This makes sure
+  -- we start sending requests slowly to the new endpoints.
+  local slow_start_ewma = 0
+  for _, endpoint in pairs(self.peers) do
+    local endpoint_string = endpoint.address .. ":" .. endpoint.port
+    local ewma = ngx.shared.balancer_ewma:get(endpoint_string) or 0
+    if slow_start_ewma < ewma then
+      slow_start_ewma = ewma
+    end
+  end
+
+  local indexed_current_endpoints = {}
+  local now = ngx.now()
+  for _, endpoint in pairs(self.peers) do
+    local endpoint_string = endpoint.address .. ":" .. endpoint.port
+    indexed_current_endpoints[endpoint_string] = true
+  end
+  for _, endpoint in pairs(backend.endpoints) do
+    local endpoint_string = endpoint.address .. ":" .. endpoint.port
+    if not indexed_current_endpoints[endpoint_string] then
+      ngx.shared.balancer_ewma:set(endpoint_string, slow_start_ewma)
+      ngx.shared.balancer_ewma_last_touched_at:set(endpoint_string, now)
+    end
   end
 
   self.peers = backend.endpoints
-  self.ewma = {}
-  self.ewma_last_touched_at = {}
 end
 
 function _M.new(self, backend)
   local o = {
     peers = backend.endpoints,
-    ewma = {},
-    ewma_last_touched_at = {},
     traffic_shaping_policy = backend.trafficShapingPolicy,
     alternative_backends = backend.alternativeBackends,
   }
