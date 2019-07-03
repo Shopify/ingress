@@ -5,7 +5,8 @@ local configuration_data = ngx.shared.configuration_data
 local certificate_data = ngx.shared.certificate_data
 
 local _M = {
-  nameservers = {}
+  nameservers = {},
+  statsd = nil,
 }
 
 function _M.get_backends_data()

@@ -9,8 +9,11 @@ local resty_lock = require("resty.lock")
 local util = require("util")
 local split = require("util.split")
 
+local configuration = require("configuration")
+
 local DECAY_TIME = 10 -- this value is in seconds
 local LOCK_KEY = ":ewma_key"
+local STATSD_BALANCER_EWMA_VALUE  = "nginx.balancer.ewma"
 local PICK_SET_SIZE = 2
 
 local ewma_lock, ewma_lock_err = resty_lock:new("balancer_ewma_locks", {timeout = 0, exptime = 0.1})
@@ -122,6 +125,14 @@ local function pick_and_score(peers, k)
   return peers[lowest_score_index]
 end
 
+local function ewma_to_statsd(self, backend_name)
+  for _, endpoint in ipairs(self.peers) do
+    local endpoint_string = endpoint.address .. ":" .. endpoint.port
+    local ewma = get_or_update_ewma(endpoint_string, 0, false)
+    statsd.gauge(STATSD_BALANCER_EWMA_VALUE, ewma, { endpoint_string = endpoint_string, backend_name = backend_name })
+  end
+end
+
 function _M.balance(self)
   local peers = self.peers
   local endpoint = peers[1]
@@ -150,6 +161,8 @@ function _M.after_balance(_)
 end
 
 function _M.sync(self, backend)
+  ewma_to_statsd(self, backend.name)
+
   self.traffic_shaping_policy = backend.trafficShapingPolicy
   self.alternative_backends = backend.alternativeBackends
 
@@ -164,12 +177,17 @@ function _M.sync(self, backend)
   ngx.shared.balancer_ewma_last_touched_at:flush_all()
 end
 
-function _M.new(self, backend)
+function _M.new(self, backend, statsd)
   local o = {
     peers = backend.endpoints,
     traffic_shaping_policy = backend.trafficShapingPolicy,
     alternative_backends = backend.alternativeBackends,
   }
+
+  if configuration.statsd ~= nil and ngx.worker.id() == 0 then
+    o.statsd = configuration.statsd
+  end
+
   setmetatable(o, self)
   self.__index = self
   return o
