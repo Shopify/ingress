@@ -2,6 +2,7 @@ containers:
   default:
     docker: quay.io/kubernetes-ingress-controller/e2e:v06262019-ecce3fd7b
   prow:
+    privileged: true
     docker: quay.io/kubernetes-ingress-controller/e2e-prow:v06292019-7c6ffeaea
 
 steps:
