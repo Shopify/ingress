@@ -29,10 +29,11 @@ steps:
     PKG: k8s.io/ingress-nginx
 
 - label: E2e test
-  container: prow
-  command: build/shopify-e2e
-  timeout_in_minutes: 45
+  timeout: 35m
+  run:
+  - build/shopify-e2e
   env:
     E2E_NODES: "10"
     K8S_VERSION: "v1.12.9"
     REPO_INFO: "https://github.com/Shopify/ingress"
+  container: prow
