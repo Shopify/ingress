@@ -11,6 +11,4 @@ _term() {
 }
 trap _term SIGTERM
 
-sleep 9000
-
 /usr/local/bin/runner.sh make kind-e2e-test
