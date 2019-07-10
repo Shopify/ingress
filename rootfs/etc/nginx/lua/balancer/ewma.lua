@@ -143,6 +143,11 @@ local function calculate_slow_start_ewma(self)
     end
   end
 
+  if endpoints_count == 0 then
+    ngx.log(ngx.INFO, "no ewma value exists for the endpoints")
+    return nil
+  end
+
   return total_ewma / endpoints_count
 end
 
@@ -193,9 +198,11 @@ function _M.sync(self, backend)
   end
 
   local slow_start_ewma = calculate_slow_start_ewma(self)
-  local now = ngx.now()
-  for _, endpoint_string in ipairs(normalized_endpoints_added) do
-    store_stats(endpoint_string, slow_start_ewma, now)
+  if slow_start_ewma ~= nil then
+    local now = ngx.now()
+    for _, endpoint_string in ipairs(normalized_endpoints_added) do
+      store_stats(endpoint_string, slow_start_ewma, now)
+    end
   end
 end
 
