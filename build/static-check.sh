@@ -28,5 +28,3 @@ if [ -z "${PKG}" ]; then
 fi
 
 hack/verify-all.sh
-
-luacheck --codes -q rootfs/etc/nginx/lua/
