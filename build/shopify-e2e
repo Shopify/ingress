@@ -1,14 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-if [[ -n "${DEBUG:+set}" ]]; then
-  set -x
-fi
+set -x
 
 _term() {
   echo "Test aborted via SIGTERM - was the CI instance preempted?"
   exit 1
 }
 trap _term SIGTERM
+
+export REPO_INFO=${REPO_INFO}
+export E2E_NODES=${E2E_NODES}
+export K8S_VERSION=${K8S_VERSION}
 
 /usr/local/bin/runner.sh make kind-e2e-test
