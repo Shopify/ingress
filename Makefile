@@ -90,6 +90,10 @@ TEMP_DIR := $(shell mktemp -d)
 
 DOCKERFILE := $(TEMP_DIR)/rootfs/Dockerfile
 
+.PHONY: image-info
+image-info:
+	echo -n '{"image":"$(IMAGE)","tag":"$(TAG)"}'
+
 .PHONY: sub-container-%
 sub-container-%:
 	$(MAKE) ARCH=$* build container
