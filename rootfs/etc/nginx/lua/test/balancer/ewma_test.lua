@@ -130,5 +130,22 @@ describe("Balancer ewma", function()
       assert_ewma_stats("10.10.10.4:8080", slow_start_ewma, ngx_now)
       assert_ewma_stats("10.10.10.5:8080", slow_start_ewma, ngx_now)
     end)
+
+    it("does not set slow_start_ewma when there is no existing ewma", function()
+      local new_backend = util.deepcopy(backend)
+      table.insert(new_backend.endpoints, { address = "10.10.10.4", port = "8080", maxFails = 0, failTimeout = 0 })
+
+      -- when the LB algorithm instance is just instantiated it won't have any
+      -- ewma value set for the initial endpoints (because it has not processed any request yet),
+      -- this test is trying to simulate that by flushing existing ewma values
+      flush_all_ewma_stats()
+
+      instance:sync(new_backend)
+
+      assert_ewma_stats("10.10.10.1:8080", nil, nil)
+      assert_ewma_stats("10.10.10.2:8080", nil, nil)
+      assert_ewma_stats("10.10.10.3:8080", nil, nil)
+      assert_ewma_stats("10.10.10.4:8080", nil, nil)
+    end)
   end)
 end)
