@@ -32,7 +32,7 @@ function docker_tag_exists() {
 
 echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
-IMAGE=$(make -s -C $DIR/../ image-info)
+IMAGE=$(make image-info)
 if docker_tag_exists "shopify/nginx-ingress-controller" $(echo $IMAGE | jq .tag) "$ARCH"; then
   echo "Image was already published, skipping."
   exit 0
