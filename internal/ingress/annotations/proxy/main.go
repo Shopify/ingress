@@ -25,21 +25,22 @@ import (
 
 // Config returns the proxy timeout to use in the upstream server/s
 type Config struct {
-	BodySize            string `json:"bodySize"`
-	ConnectTimeout      int    `json:"connectTimeout"`
-	SendTimeout         int    `json:"sendTimeout"`
-	ReadTimeout         int    `json:"readTimeout"`
-	BuffersNumber       int    `json:"buffersNumber"`
-	BufferSize          string `json:"bufferSize"`
-	CookieDomain        string `json:"cookieDomain"`
-	CookiePath          string `json:"cookiePath"`
-	NextUpstream        string `json:"nextUpstream"`
-	NextUpstreamTimeout int    `json:"nextUpstreamTimeout"`
-	NextUpstreamTries   int    `json:"nextUpstreamTries"`
-	ProxyRedirectFrom   string `json:"proxyRedirectFrom"`
-	ProxyRedirectTo     string `json:"proxyRedirectTo"`
-	RequestBuffering    string `json:"requestBuffering"`
-	ProxyBuffering      string `json:"proxyBuffering"`
+	BodySize             string `json:"bodySize"`
+	ConnectTimeout       int    `json:"connectTimeout"`
+	SendTimeout          int    `json:"sendTimeout"`
+	ReadTimeout          int    `json:"readTimeout"`
+	BuffersNumber        int    `json:"buffersNumber"`
+	BufferSize           string `json:"bufferSize"`
+	CookieDomain         string `json:"cookieDomain"`
+	CookiePath           string `json:"cookiePath"`
+	NextUpstream         string `json:"nextUpstream"`
+	NextUpstreamTimeout  int    `json:"nextUpstreamTimeout"`
+	NextUpstreamTries    int    `json:"nextUpstreamTries"`
+	ProxyRedirectFrom    string `json:"proxyRedirectFrom"`
+	ProxyRedirectTo      string `json:"proxyRedirectTo"`
+	RequestBuffering     string `json:"requestBuffering"`
+	ProxyBuffering       string `json:"proxyBuffering"`
+	ProxyMaxTempFileSize string `json:"proxyMaxTempFileSize"`
 }
 
 // Equal tests for equality between two Configuration types
@@ -93,6 +94,10 @@ func (l1 *Config) Equal(l2 *Config) bool {
 		return false
 	}
 	if l1.ProxyBuffering != l2.ProxyBuffering {
+		return false
+	}
+
+	if l1.ProxyMaxTempFileSize != l2.ProxyMaxTempFileSize {
 		return false
 	}
 
@@ -189,6 +194,11 @@ func (a proxy) Parse(ing *networking.Ingress) (interface{}, error) {
 	config.ProxyBuffering, err = parser.GetStringAnnotation("proxy-buffering", ing)
 	if err != nil {
 		config.ProxyBuffering = defBackend.ProxyBuffering
+	}
+
+	config.ProxyMaxTempFileSize, err = parser.GetStringAnnotation("proxy-max-temp-file-size", ing)
+	if err != nil {
+		config.ProxyMaxTempFileSize = defBackend.ProxyMaxTempFileSize
 	}
 
 	return config, nil
