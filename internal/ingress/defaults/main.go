@@ -150,4 +150,8 @@ type Backend struct {
 	// Enables or disables buffering of responses from the proxied server.
 	// http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffering
 	ProxyBuffering string `json:"proxy-buffering"`
+
+	// Sets the maximum temp file size when proxy-buffers capacity is exceeded.
+	// http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_max_temp_file_size
+	ProxyMaxTempFileSize string `json:"proxy-max-temp-file-size"`
 }

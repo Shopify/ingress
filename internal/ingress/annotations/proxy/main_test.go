@@ -81,6 +81,7 @@ func (m mockBackend) GetDefaultBackend() defaults.Backend {
 		ProxyNextUpstreamTries:   3,
 		ProxyRequestBuffering:    "on",
 		ProxyBuffering:           "off",
+		ProxyMaxTempFileSize:     "1024m",
 	}
 }
 
@@ -99,6 +100,7 @@ func TestProxy(t *testing.T) {
 	data[parser.GetAnnotationWithPrefix("proxy-next-upstream-tries")] = "3"
 	data[parser.GetAnnotationWithPrefix("proxy-request-buffering")] = "off"
 	data[parser.GetAnnotationWithPrefix("proxy-buffering")] = "on"
+	data[parser.GetAnnotationWithPrefix("proxy-max-temp-file-size")] = "128k"
 	ing.SetAnnotations(data)
 
 	i, err := NewParser(mockBackend{}).Parse(ing)
@@ -141,6 +143,9 @@ func TestProxy(t *testing.T) {
 	}
 	if p.ProxyBuffering != "on" {
 		t.Errorf("expected on as proxy-buffering but returned %v", p.ProxyBuffering)
+	}
+	if p.ProxyMaxTempFileSize != "128k" {
+		t.Errorf("expected 128k as proxy-max-temp-file-size but returned %v", p.ProxyMaxTempFileSize)
 	}
 }
 
@@ -187,5 +192,8 @@ func TestProxyWithNoAnnotation(t *testing.T) {
 	}
 	if p.RequestBuffering != "on" {
 		t.Errorf("expected on as request-buffering but returned %v", p.RequestBuffering)
+	}
+	if p.ProxyMaxTempFileSize != "1024m" {
+		t.Errorf("expected 1024m as proxy-max-temp-file-size but returned %v", p.ProxyMaxTempFileSize)
 	}
 }
