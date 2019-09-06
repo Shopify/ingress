@@ -33,8 +33,6 @@ import (
 var (
 	// EnableSSLChainCompletion Autocomplete SSL certificate chains with missing intermediate CA certificates.
 	EnableSSLChainCompletion = false
-	// EnableDynamicCertificates Dynamically update SSL certificates instead of reloading NGINX
-	EnableDynamicCertificates = true
 )
 
 const (
@@ -74,6 +72,10 @@ const (
 	// SSL enabled protocols to use
 	// http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_protocols
 	sslProtocols = "TLSv1.2"
+
+	// Disable TLS 1.3 early data
+	// http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_early_data
+	sslEarlyData = false
 
 	// Time during which a client may reuse the session parameters stored in a cache.
 	// http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_session_timeout
@@ -123,11 +125,6 @@ type Configuration struct {
 	// http://nginx.org/en/docs/ngx_core_module.html#error_log
 	// By default error logs go to /var/log/nginx/error.log
 	ErrorLogPath string `json:"error-log-path,omitempty"`
-
-	// EnableDynamicTLSRecords enables dynamic TLS record sizes
-	// https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency
-	// By default this is enabled
-	EnableDynamicTLSRecords bool `json:"enable-dynamic-tls-records"`
 
 	// EnableModsecurity enables the modsecurity module for NGINX
 	// By default this is disabled
@@ -317,6 +314,10 @@ type Configuration struct {
 	// http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_protocols
 	SSLProtocols string `json:"ssl-protocols,omitempty"`
 
+	// Enables or disable TLS 1.3 early data.
+	// http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_early_data
+	SSLEarlyData bool `json:"ssl-early-data,omitempty"`
+
 	// Enables or disables the use of shared SSL cache among worker processes.
 	// http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_session_cache
 	SSLSessionCache bool `json:"ssl-session-cache,omitempty"`
@@ -436,6 +437,10 @@ type Configuration struct {
 	// http://nginx.org/en/docs/stream/ngx_stream_proxy_module.html#proxy_responses
 	// Default: 1
 	ProxyStreamResponses int `json:"proxy-stream-responses,omitempty"`
+
+	// Modifies the HTTP version the proxy uses to interact with the backend.
+	// http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_http_version
+	ProxyHTTPVersion string `json:"proxy-http-version"`
 
 	// Sets the ipv4 addresses on which the server will accept requests.
 	BindAddressIpv4 []string `json:"bind-address-ipv4,omitempty"`
@@ -603,6 +608,13 @@ type Configuration struct {
 
 	// Block all requests with given Referer headers
 	BlockReferers []string `json:"block-referers"`
+
+	// Lua shared dict configuration data / certificate data
+	LuaSharedDicts map[string]int `json:"lua-shared-dicts"`
+
+	// DefaultSSLCertificate holds the default SSL certificate to use in the configuration
+	// It can be the fake certificate or the one behind the flag --default-ssl-certificate
+	DefaultSSLCertificate *ingress.SSLCert `json:"-"`
 }
 
 // NewDefault returns the default nginx configuration
@@ -618,7 +630,7 @@ func NewDefault() Configuration {
 	defNginxStatusIpv4Whitelist = append(defNginxStatusIpv4Whitelist, "127.0.0.1")
 	defNginxStatusIpv6Whitelist = append(defNginxStatusIpv6Whitelist, "::1")
 	defProxyDeadlineDuration := time.Duration(5) * time.Second
-	defGlobalExternalAuth := GlobalExternalAuth{"", "", "", "", append(defResponseHeaders, ""), "", ""}
+	defGlobalExternalAuth := GlobalExternalAuth{"", "", "", "", append(defResponseHeaders, ""), "", "", "", []string{}}
 
 	cfg := Configuration{
 		AllowBackendServerHeader:         false,
@@ -636,7 +648,6 @@ func NewDefault() Configuration {
 		ClientHeaderTimeout:              60,
 		ClientBodyBufferSize:             "8k",
 		ClientBodyTimeout:                60,
-		EnableDynamicTLSRecords:          true,
 		EnableUnderscoresInHeaders:       false,
 		ErrorLogLevel:                    errorLevel,
 		UseForwardedHeaders:              false,
@@ -679,6 +690,7 @@ func NewDefault() Configuration {
 		SSLCiphers:                       sslCiphers,
 		SSLECDHCurve:                     "auto",
 		SSLProtocols:                     sslProtocols,
+		SSLEarlyData:                     sslEarlyData,
 		SSLSessionCache:                  true,
 		SSLSessionCacheSize:              sslSessionCacheSize,
 		SSLSessionTickets:                true,
@@ -715,6 +727,7 @@ func NewDefault() Configuration {
 			LimitRate:                0,
 			LimitRateAfter:           0,
 			ProxyBuffering:           "off",
+			ProxyHTTPVersion:         "1.1",
 			ProxyMaxTempFileSize:     "1024m",
 		},
 		UpstreamKeepaliveConnections: 32,
@@ -763,29 +776,28 @@ func (cfg Configuration) BuildLogFormatUpstream() string {
 
 // TemplateConfig contains the nginx configuration to render the file nginx.conf
 type TemplateConfig struct {
-	ProxySetHeaders           map[string]string
-	AddHeaders                map[string]string
-	BacklogSize               int
-	Backends                  []*ingress.Backend
-	PassthroughBackends       []*ingress.SSLPassthroughBackend
-	Servers                   []*ingress.Server
-	TCPBackends               []ingress.L4Service
-	UDPBackends               []ingress.L4Service
-	HealthzURI                string
-	Cfg                       Configuration
-	IsIPV6Enabled             bool
-	IsSSLPassthroughEnabled   bool
-	NginxStatusIpv4Whitelist  []string
-	NginxStatusIpv6Whitelist  []string
-	RedirectServers           interface{}
-	ListenPorts               *ListenPorts
-	PublishService            *apiv1.Service
-	EnableDynamicCertificates bool
-	EnableMetrics             bool
+	ProxySetHeaders          map[string]string
+	AddHeaders               map[string]string
+	BacklogSize              int
+	Backends                 []*ingress.Backend
+	PassthroughBackends      []*ingress.SSLPassthroughBackend
+	Servers                  []*ingress.Server
+	TCPBackends              []ingress.L4Service
+	UDPBackends              []ingress.L4Service
+	HealthzURI               string
+	Cfg                      Configuration
+	IsIPV6Enabled            bool
+	IsSSLPassthroughEnabled  bool
+	NginxStatusIpv4Whitelist []string
+	NginxStatusIpv6Whitelist []string
+	RedirectServers          interface{}
+	ListenPorts              *ListenPorts
+	PublishService           *apiv1.Service
+	EnableMetrics            bool
 
 	PID          string
-	StatusSocket string
 	StatusPath   string
+	StatusPort   int
 	StreamSocket string
 }
 
@@ -804,10 +816,12 @@ type ListenPorts struct {
 type GlobalExternalAuth struct {
 	URL string `json:"url"`
 	// Host contains the hostname defined in the URL
-	Host            string   `json:"host"`
-	SigninURL       string   `json:"signinUrl"`
-	Method          string   `json:"method"`
-	ResponseHeaders []string `json:"responseHeaders,omitempty"`
-	RequestRedirect string   `json:"requestRedirect"`
-	AuthSnippet     string   `json:"authSnippet"`
+	Host              string   `json:"host"`
+	SigninURL         string   `json:"signinUrl"`
+	Method            string   `json:"method"`
+	ResponseHeaders   []string `json:"responseHeaders,omitempty"`
+	RequestRedirect   string   `json:"requestRedirect"`
+	AuthSnippet       string   `json:"authSnippet"`
+	AuthCacheKey      string   `json:"authCacheKey"`
+	AuthCacheDuration []string `json:"authCacheDuration"`
 }

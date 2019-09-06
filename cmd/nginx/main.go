@@ -63,9 +63,7 @@ func main() {
 		klog.Fatal(err)
 	}
 
-	nginxVersion()
-
-	fs, err := file.NewLocalFS()
+	err = file.CreateRequiredDirectories()
 	if err != nil {
 		klog.Fatal(err)
 	}
@@ -98,8 +96,8 @@ func main() {
 		}
 	}
 
-	conf.FakeCertificate = ssl.GetFakeSSLCert(fs)
-	klog.Infof("Created fake certificate with PemFileName: %v", conf.FakeCertificate.PemFileName)
+	conf.FakeCertificate = ssl.GetFakeSSLCert()
+	klog.Infof("SSL fake certificate created %v", conf.FakeCertificate.PemFileName)
 
 	k8s.IsNetworkingIngressAvailable = k8s.NetworkingIngressAvailable(kubeClient)
 	if !k8s.IsNetworkingIngressAvailable {
@@ -125,7 +123,7 @@ func main() {
 	}
 	mc.Start()
 
-	ngx := controller.NewNGINXController(conf, mc, fs)
+	ngx := controller.NewNGINXController(conf, mc)
 	go handleSigterm(ngx, func(code int) {
 		os.Exit(code)
 	})
@@ -133,7 +131,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	if conf.EnableProfiling {
-		registerProfiler(mux)
+		go registerProfiler()
 	}
 
 	registerHealthz(ngx, mux)
@@ -267,7 +265,9 @@ func registerMetrics(reg *prometheus.Registry, mux *http.ServeMux) {
 
 }
 
-func registerProfiler(mux *http.ServeMux) {
+func registerProfiler() {
+	mux := http.NewServeMux()
+
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/heap", pprof.Index)
 	mux.HandleFunc("/debug/pprof/mutex", pprof.Index)
@@ -278,6 +278,12 @@ func registerProfiler(mux *http.ServeMux) {
 	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
 	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
 	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	server := &http.Server{
+		Addr:    fmt.Sprintf(":10255"),
+		Handler: mux,
+	}
+	klog.Fatal(server.ListenAndServe())
 }
 
 func startHTTPServer(port int, mux *http.ServeMux) {

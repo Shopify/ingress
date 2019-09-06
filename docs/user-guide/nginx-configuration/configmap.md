@@ -34,7 +34,6 @@ The following table shows a configuration option's name, type, and the default v
 |[access-log-path](#access-log-path)|string|"/var/log/nginx/access.log"|
 |[enable-access-log-for-default-backend](#enable-access-log-for-default-backend)|bool|"false"|
 |[error-log-path](#error-log-path)|string|"/var/log/nginx/error.log"|
-|[enable-dynamic-tls-records](#enable-dynamic-tls-records)|bool|"true"|
 |[enable-modsecurity](#enable-modsecurity)|bool|"false"|
 |[enable-owasp-modsecurity-crs](#enable-owasp-modsecurity-crs)|bool|"false"|
 |[client-header-buffer-size](#client-header-buffer-size)|string|"1k"|
@@ -149,6 +148,7 @@ The following table shows a configuration option's name, type, and the default v
 |[skip-access-log-urls](#skip-access-log-urls)|[]string|[]string{}|
 |[limit-rate](#limit-rate)|int|0|
 |[limit-rate-after](#limit-rate-after)|int|0|
+|[lua-shared-dicts](#lua-shared-dicts)|string|""|
 |[http-redirect-code](#http-redirect-code)|int|308|
 |[proxy-buffering](#proxy-buffering)|string|"off"|
 |[limit-req-status-code](#limit-req-status-code)|int|503|
@@ -160,6 +160,8 @@ The following table shows a configuration option's name, type, and the default v
 |[global-auth-response-headers](#global-auth-response-headers)|string|""|
 |[global-auth-request-redirect](#global-auth-request-redirect)|string|""|
 |[global-auth-snippet](#global-auth-snippet)|string|""|
+|[global-auth-cache-key](#global-auth-cache-key)|string|""|
+|[global-auth-cache-duration](#global-auth-cache-duration)|string|"200 202 401 5m"|
 |[no-auth-locations](#no-auth-locations)|string|"/.well-known/acme-challenge"|
 |[block-cidrs](#block-cidrs)|[]string|""|
 |[block-user-agents](#block-user-agents)|[]string|""|
@@ -196,7 +198,7 @@ __Note:__ the file `/var/log/nginx/access.log` is a symlink to `/dev/stdout`
 
 ## enable-access-log-for-default-backend
 
-Enables logging access to default backend. _**default:**_ is disabled. 
+Enables logging access to default backend. _**default:**_ is disabled.
 
 ## error-log-path
 
@@ -206,13 +208,6 @@ __Note:__ the file `/var/log/nginx/error.log` is a symlink to `/dev/stderr`
 
 _References:_
 [http://nginx.org/en/docs/ngx_core_module.html#error_log](http://nginx.org/en/docs/ngx_core_module.html#error_log)
-
-## enable-dynamic-tls-records
-
-Enables dynamically sized TLS records to improve time-to-first-byte. _**default:**_ is enabled
-
-_References:_
-[https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency](https://blog.cloudflare.com/optimizing-tls-over-tcp-to-reduce-latency)
 
 ## enable-modsecurity
 
@@ -358,15 +353,13 @@ Sets if the escape parameter allows JSON ("true") or default characters escaping
 Sets the nginx [log format](http://nginx.org/en/docs/http/ngx_http_log_module.html#log_format).
 Example for json output:
 
-```console
-log-format-upstream: '{ "time": "$time_iso8601", "remote_addr": "$proxy_protocol_addr",
-    "x-forward-for": "$proxy_add_x_forwarded_for", "request_id": "$req_id", "remote_user":
-    "$remote_user", "bytes_sent": $bytes_sent, "request_time": $request_time, "status":
-    $status, "vhost": "$host", "request_proto": "$server_protocol", "path": "$uri",
-    "request_query": "$args", "request_length": $request_length, "duration": $request_time,
-    "method": "$request_method", "http_referrer": "$http_referer", "http_user_agent":
-    "$http_user_agent" }'
-  ```
+```json
+
+log-format-upstream: '{"time": "$time_iso8601", "remote_addr": "$proxy_protocol_addr", "x-forward-for": "$proxy_add_x_forwarded_for", "request_id": "$req_id",
+  "remote_user": "$remote_user", "bytes_sent": $bytes_sent, "request_time": $request_time, "status":$status, "vhost": "$host", "request_proto": "$server_protocol",
+  "path": "$uri", "request_query": "$args", "request_length": $request_length, "duration": $request_time,"method": "$request_method", "http_referrer": "$http_referer",
+  "http_user_agent": "$http_user_agent" }'
+```
 
 Please check the [log-format](log-format.md) for definition of each field.
 
@@ -439,7 +432,7 @@ _References:_
 Instructs NGINX to create an individual listening socket for each worker process (using the SO_REUSEPORT socket option), allowing a kernel to distribute incoming connections between worker processes
 _**default:**_ true
 
-## proxy-headers-hash-bucket-size 
+## proxy-headers-hash-bucket-size
 
 Sets the size of the bucket for the proxy headers hash tables.
 
@@ -486,6 +479,14 @@ Sets the [SSL protocols](http://nginx.org/en/docs/http/ngx_http_ssl_module.html#
 
 Please check the result of the configuration using `https://ssllabs.com/ssltest/analyze.html` or `https://testssl.sh`.
 
+## ssl-early-data
+
+Enables or disables TLS 1.3 [early data](https://tools.ietf.org/html/rfc8446#section-2.3)
+
+This requires `ssl-protocols` to have `TLSv1.3` enabled.
+
+[ssl_early_data](http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_early_data). The default is: `false`.
+
 ## ssl-session-cache
 
 Enables or disables the use of shared [SSL cache](http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_session_cache) among worker processes.
@@ -503,7 +504,7 @@ Enables or disables session resumption through [TLS session tickets](http://ngin
 Sets the secret key used to encrypt and decrypt TLS session tickets. The value must be a valid base64 string.
 To create a ticket: `openssl rand 80 | openssl enc -A -base64`
 
-[TLS session ticket-key](http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_session_tickets), by default, a randomly generated key is used. 
+[TLS session ticket-key](http://nginx.org/en/docs/http/ngx_http_ssl_module.html#ssl_session_tickets), by default, a randomly generated key is used.
 
 ## ssl-session-timeout
 
@@ -622,7 +623,7 @@ _References:_
 
 Activates the cache for connections to upstream servers. The connections parameter sets the maximum number of idle
 keepalive connections to upstream servers that are preserved in the cache of each worker process. When this number is
-exceeded, the least recently used connections are closed. 
+exceeded, the least recently used connections are closed.
 _**default:**_ 32
 
 _References:_
@@ -643,7 +644,7 @@ _References:_
 Sets the maximum number of requests that can be served through one keepalive connection. After the maximum number of
 requests is made, the connection is closed.
 _**default:**_ 100
-	
+
 
 _References:_
 [http://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive_requests](http://nginx.org/en/docs/http/ngx_http_upstream_module.html#keepalive_requests)
@@ -853,6 +854,21 @@ _References:_
 
 Sets the initial amount after which the further transmission of a response to a client will be rate limited.
 
+## lua-shared-dicts
+
+Customize default Lua shared dictionaries or define more. You can use the following syntax to do so:
+
+```
+lua-shared-dicts: "<my dict name>: <my dict size>, [<my dict name>: <my dict size>], ..."
+```
+
+For example following will set default `certificate_data` dictionary to `100M` and will introduce a new dictionary called
+`my_custom_plugin`:
+
+```
+lua-shared-dicts: "certificate_data: 100, my_custom_plugin: 5"
+```
+
 _References:_
 [http://nginx.org/en/docs/http/ngx_http_core_module.html#limit_rate_after](http://nginx.org/en/docs/http/ngx_http_core_module.html#limit_rate_after)
 
@@ -921,6 +937,14 @@ _**default:**_ ""
 Sets a custom snippet to use with external authentication. Applied to all the locations.
 Similar to the Ingress rule annotation `nginx.ingress.kubernetes.io/auth-request-redirect`.
 _**default:**_ ""
+
+## global-auth-cache-key
+
+Enables caching for global auth requests. Specify a lookup key for auth responses, e.g. `$remote_user$http_authorization`.
+
+## global-auth-cache-duration
+
+Set a caching time for auth responses based on their response codes, e.g. `200 202 30m`. See [proxy_cache_valid](http://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_cache_valid) for details. You may specify multiple, comma-separated values: `200 202 10m, 401 5m`. defaults to `200 202 401 5m`.
 
 ## no-auth-locations
 

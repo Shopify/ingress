@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/url"
@@ -37,13 +38,13 @@ import (
 	"github.com/pkg/errors"
 
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/ingress-nginx/internal/file"
+	"k8s.io/klog"
+
 	"k8s.io/ingress-nginx/internal/ingress"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/influxdb"
 	"k8s.io/ingress-nginx/internal/ingress/annotations/ratelimit"
 	"k8s.io/ingress-nginx/internal/ingress/controller/config"
 	ing_net "k8s.io/ingress-nginx/internal/net"
-	"k8s.io/klog"
 )
 
 const (
@@ -66,8 +67,8 @@ type Template struct {
 
 //NewTemplate returns a new Template instance or an
 //error if the specified template file contains errors
-func NewTemplate(file string, fs file.Filesystem) (*Template, error) {
-	data, err := fs.ReadFile(file)
+func NewTemplate(file string) (*Template, error) {
+	data, err := ioutil.ReadFile(file)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unexpected error reading template %v", file)
 	}
@@ -132,36 +133,37 @@ var (
 			}
 			return true
 		},
-		"escapeLiteralDollar":        escapeLiteralDollar,
-		"shouldConfigureLuaRestyWAF": shouldConfigureLuaRestyWAF,
-		"buildLuaSharedDictionaries": buildLuaSharedDictionaries,
-		"buildLocation":              buildLocation,
-		"buildAuthLocation":          buildAuthLocation,
-		"shouldApplyGlobalAuth":      shouldApplyGlobalAuth,
-		"buildAuthResponseHeaders":   buildAuthResponseHeaders,
-		"buildProxyPass":             buildProxyPass,
-		"filterRateLimits":           filterRateLimits,
-		"buildRateLimitZones":        buildRateLimitZones,
-		"buildRateLimit":             buildRateLimit,
-		"buildResolversForLua":       buildResolversForLua,
-		"configForLua":               configForLua,
-		"locationConfigForLua":       locationConfigForLua,
-		"buildResolvers":             buildResolvers,
-		"buildUpstreamName":          buildUpstreamName,
-		"isLocationInLocationList":   isLocationInLocationList,
-		"isLocationAllowed":          isLocationAllowed,
-		"buildLogFormatUpstream":     buildLogFormatUpstream,
-		"buildDenyVariable":          buildDenyVariable,
-		"getenv":                     os.Getenv,
-		"contains":                   strings.Contains,
-		"hasPrefix":                  strings.HasPrefix,
-		"hasSuffix":                  strings.HasSuffix,
-		"trimSpace":                  strings.TrimSpace,
-		"toUpper":                    strings.ToUpper,
-		"toLower":                    strings.ToLower,
-		"formatIP":                   formatIP,
-		"buildNextUpstream":          buildNextUpstream,
-		"getIngressInformation":      getIngressInformation,
+		"escapeLiteralDollar":             escapeLiteralDollar,
+		"shouldConfigureLuaRestyWAF":      shouldConfigureLuaRestyWAF,
+		"buildLuaSharedDictionaries":      buildLuaSharedDictionaries,
+		"luaConfigurationRequestBodySize": luaConfigurationRequestBodySize,
+		"buildLocation":                   buildLocation,
+		"buildAuthLocation":               buildAuthLocation,
+		"shouldApplyGlobalAuth":           shouldApplyGlobalAuth,
+		"buildAuthResponseHeaders":        buildAuthResponseHeaders,
+		"buildProxyPass":                  buildProxyPass,
+		"filterRateLimits":                filterRateLimits,
+		"buildRateLimitZones":             buildRateLimitZones,
+		"buildRateLimit":                  buildRateLimit,
+		"configForLua":                    configForLua,
+		"locationConfigForLua":            locationConfigForLua,
+		"buildResolvers":                  buildResolvers,
+		"buildUpstreamName":               buildUpstreamName,
+		"isLocationInLocationList":        isLocationInLocationList,
+		"isLocationAllowed":               isLocationAllowed,
+		"buildLogFormatUpstream":          buildLogFormatUpstream,
+		"buildDenyVariable":               buildDenyVariable,
+		"getenv":                          os.Getenv,
+		"contains":                        strings.Contains,
+		"hasPrefix":                       strings.HasPrefix,
+		"hasSuffix":                       strings.HasSuffix,
+		"trimSpace":                       strings.TrimSpace,
+		"toUpper":                         strings.ToUpper,
+		"toLower":                         strings.ToLower,
+		"formatIP":                        formatIP,
+		"quote":                           quote,
+		"buildNextUpstream":               buildNextUpstream,
+		"getIngressInformation":           getIngressInformation,
 		"serverConfig": func(all config.TemplateConfig, server *ingress.Server) interface{} {
 			return struct{ First, Second interface{} }{all, server}
 		},
@@ -177,6 +179,8 @@ var (
 		"opentracingPropagateContext":        opentracingPropagateContext,
 		"buildCustomErrorLocationsPerServer": buildCustomErrorLocationsPerServer,
 		"shouldLoadModSecurityModule":        shouldLoadModSecurityModule,
+		"buildHTTPListener":                  buildHTTPListener,
+		"buildHTTPSListener":                 buildHTTPSListener,
 	}
 )
 
@@ -208,6 +212,19 @@ func formatIP(input string) string {
 	return fmt.Sprintf("[%s]", input)
 }
 
+func quote(input interface{}) string {
+	var inputStr string
+	switch input := input.(type) {
+	case string:
+		inputStr = input
+	case fmt.Stringer:
+		inputStr = input.String()
+	default:
+		inputStr = fmt.Sprintf("%v", input)
+	}
+	return fmt.Sprintf("%q", inputStr)
+}
+
 func shouldConfigureLuaRestyWAF(disableLuaRestyWAF bool, mode string) bool {
 	if !disableLuaRestyWAF && len(mode) > 0 {
 		return true
@@ -216,22 +233,26 @@ func shouldConfigureLuaRestyWAF(disableLuaRestyWAF bool, mode string) bool {
 	return false
 }
 
-func buildLuaSharedDictionaries(s interface{}, disableLuaRestyWAF bool) string {
+func buildLuaSharedDictionaries(c interface{}, s interface{}, disableLuaRestyWAF bool) string {
+	var out []string
+
+	cfg, ok := c.(config.Configuration)
+	if !ok {
+		klog.Errorf("expected a 'config.Configuration' type but %T was returned", c)
+		return ""
+	}
 	servers, ok := s.([]*ingress.Server)
 	if !ok {
 		klog.Errorf("expected an '[]*ingress.Server' type but %T was returned", s)
 		return ""
 	}
 
-	out := []string{
-		"lua_shared_dict configuration_data 15M",
-		"lua_shared_dict certificate_data 16M",
-		"lua_shared_dict balancer_ewma 5M",
-		"lua_shared_dict balancer_ewma_last_touched_at 5M",
-		"lua_shared_dict balancer_ewma_locks 512k",
+	for name, size := range cfg.LuaSharedDicts {
+		out = append(out, fmt.Sprintf("lua_shared_dict %s %dM", name, size))
 	}
 
-	if !disableLuaRestyWAF {
+	// TODO: there must be a better place for this
+	if _, ok := cfg.LuaSharedDicts["waf_storage"]; !ok && !disableLuaRestyWAF {
 		luaRestyWAFEnabled := func() bool {
 			for _, server := range servers {
 				for _, location := range server.Locations {
@@ -247,38 +268,23 @@ func buildLuaSharedDictionaries(s interface{}, disableLuaRestyWAF bool) string {
 		}
 	}
 
-	return strings.Join(out, ";\n\r") + ";"
+	return strings.Join(out, ";\n") + ";\n"
 }
 
-func buildResolversForLua(res interface{}, disableIpv6 interface{}) string {
-	nss, ok := res.([]net.IP)
+func luaConfigurationRequestBodySize(c interface{}) string {
+	cfg, ok := c.(config.Configuration)
 	if !ok {
-		klog.Errorf("expected a '[]net.IP' type but %T was returned", res)
-		return ""
-	}
-	no6, ok := disableIpv6.(bool)
-	if !ok {
-		klog.Errorf("expected a 'bool' type but %T was returned", disableIpv6)
-		return ""
+		klog.Errorf("expected a 'config.Configuration' type but %T was returned", c)
+		return "100" // just a default number
 	}
 
-	if len(nss) == 0 {
-		return ""
+	size := cfg.LuaSharedDicts["configuration_data"]
+	if size < cfg.LuaSharedDicts["certificate_data"] {
+		size = cfg.LuaSharedDicts["certificate_data"]
 	}
+	size = size + 1
 
-	r := []string{}
-	for _, ns := range nss {
-		if ing_net.IsIPV6(ns) {
-			if no6 {
-				continue
-			}
-			r = append(r, fmt.Sprintf("\"[%v]\"", ns))
-		} else {
-			r = append(r, fmt.Sprintf("\"%v\"", ns))
-		}
-	}
-
-	return strings.Join(r, ", ")
+	return fmt.Sprintf("%d", size)
 }
 
 // configForLua returns some general configuration as Lua table represented as string
@@ -317,7 +323,7 @@ func locationConfigForLua(l interface{}, s interface{}, a interface{}) string {
 		return "{}"
 	}
 
-	forceSSLRedirect := location.Rewrite.ForceSSLRedirect || (len(server.SSLCert.PemFileName) > 0 && location.Rewrite.SSLRedirect)
+	forceSSLRedirect := location.Rewrite.ForceSSLRedirect || (server.SSLCert != nil && location.Rewrite.SSLRedirect)
 	forceSSLRedirect = forceSSLRedirect && !isLocationInLocationList(l, all.Cfg.NoTLSRedirectLocations)
 
 	return fmt.Sprintf(`{
@@ -500,6 +506,9 @@ func buildProxyPass(host string, b interface{}, loc interface{}) string {
 	case "AJP":
 		proto = ""
 		proxyPass = "ajp_pass"
+	case "FCGI":
+		proto = ""
+		proxyPass = "fastcgi_pass"
 	}
 
 	upstreamName := "upstream_balancer"
@@ -788,6 +797,7 @@ type ingressInformation struct {
 	Namespace   string
 	Rule        string
 	Service     string
+	ServicePort string
 	Annotations map[string]string
 }
 
@@ -799,6 +809,9 @@ func (info *ingressInformation) Equal(other *ingressInformation) bool {
 		return false
 	}
 	if info.Service != other.Service {
+		return false
+	}
+	if info.ServicePort != other.ServicePort {
 		return false
 	}
 	if !reflect.DeepEqual(info.Annotations, other.Annotations) {
@@ -839,6 +852,9 @@ func getIngressInformation(i, h, p interface{}) *ingressInformation {
 
 	if ing.Spec.Backend != nil {
 		info.Service = ing.Spec.Backend.ServiceName
+		if ing.Spec.Backend.ServicePort.String() != "0" {
+			info.ServicePort = ing.Spec.Backend.ServicePort.String()
+		}
 	}
 
 	for _, rule := range ing.Spec.Rules {
@@ -853,6 +869,10 @@ func getIngressInformation(i, h, p interface{}) *ingressInformation {
 		for _, rPath := range rule.HTTP.Paths {
 			if path == rPath.Path {
 				info.Service = rPath.Backend.ServiceName
+				if rPath.Backend.ServicePort.String() != "0" {
+					info.ServicePort = rPath.Backend.ServicePort.String()
+				}
+
 				return info
 			}
 		}
@@ -1090,4 +1110,170 @@ func shouldLoadModSecurityModule(c interface{}, s interface{}) bool {
 
 	// Not enabled globally nor via annotation on a location, no need to load the module.
 	return false
+}
+
+func buildHTTPListener(t interface{}, s interface{}) string {
+	var out []string
+
+	tc, ok := t.(config.TemplateConfig)
+	if !ok {
+		klog.Errorf("expected a 'config.TemplateConfig' type but %T was returned", t)
+		return ""
+	}
+
+	hostname, ok := s.(string)
+	if !ok {
+		klog.Errorf("expected a 'string' type but %T was returned", s)
+		return ""
+	}
+
+	addrV4 := []string{""}
+	if len(tc.Cfg.BindAddressIpv4) > 0 {
+		addrV4 = tc.Cfg.BindAddressIpv4
+	}
+
+	co := commonListenOptions(tc, hostname)
+
+	out = append(out, httpListener(addrV4, co, tc)...)
+
+	if !tc.IsIPV6Enabled {
+		return strings.Join(out, "\n")
+	}
+
+	addrV6 := []string{"[::]"}
+	if len(tc.Cfg.BindAddressIpv6) > 0 {
+		addrV6 = tc.Cfg.BindAddressIpv6
+	}
+
+	out = append(out, httpListener(addrV6, co, tc)...)
+
+	return strings.Join(out, "\n")
+}
+
+func buildHTTPSListener(t interface{}, s interface{}) string {
+	var out []string
+
+	tc, ok := t.(config.TemplateConfig)
+	if !ok {
+		klog.Errorf("expected a 'config.TemplateConfig' type but %T was returned", t)
+		return ""
+	}
+
+	hostname, ok := s.(string)
+	if !ok {
+		klog.Errorf("expected a 'string' type but %T was returned", s)
+		return ""
+	}
+
+	/*
+		if server.SSLCert == nil && server.Hostname != "_" {
+			return ""
+		}
+	*/
+
+	co := commonListenOptions(tc, hostname)
+
+	addrV4 := []string{""}
+	if len(tc.Cfg.BindAddressIpv4) > 0 {
+		addrV4 = tc.Cfg.BindAddressIpv4
+	}
+
+	out = append(out, httpsListener(addrV4, co, tc)...)
+
+	if !tc.IsIPV6Enabled {
+		return strings.Join(out, "\n")
+	}
+
+	addrV6 := []string{"[::]"}
+	if len(tc.Cfg.BindAddressIpv6) > 0 {
+		addrV6 = tc.Cfg.BindAddressIpv6
+	}
+
+	out = append(out, httpsListener(addrV6, co, tc)...)
+
+	return strings.Join(out, "\n")
+}
+
+func commonListenOptions(template config.TemplateConfig, hostname string) string {
+	var out []string
+
+	if template.Cfg.UseProxyProtocol {
+		out = append(out, "proxy_protocol")
+	}
+
+	if hostname != "_" {
+		return strings.Join(out, " ")
+	}
+
+	// setup options that are valid only once per port
+
+	out = append(out, "default_server")
+
+	if template.Cfg.ReusePort {
+		out = append(out, "reuseport")
+	}
+
+	out = append(out, fmt.Sprintf("backlog=%v", template.BacklogSize))
+
+	return strings.Join(out, " ")
+}
+
+func httpListener(addresses []string, co string, tc config.TemplateConfig) []string {
+	out := make([]string, 0)
+	for _, address := range addresses {
+		l := make([]string, 0)
+		l = append(l, "listen")
+
+		if address == "" {
+			l = append(l, fmt.Sprintf("%v", tc.ListenPorts.HTTP))
+		} else {
+			l = append(l, fmt.Sprintf("%v:%v", address, tc.ListenPorts.HTTP))
+		}
+
+		l = append(l, co)
+		l = append(l, ";")
+		out = append(out, strings.Join(l, " "))
+	}
+
+	return out
+}
+
+func httpsListener(addresses []string, co string, tc config.TemplateConfig) []string {
+	out := make([]string, 0)
+	for _, address := range addresses {
+		l := make([]string, 0)
+		l = append(l, "listen")
+
+		if tc.IsSSLPassthroughEnabled {
+			if address == "" {
+				l = append(l, fmt.Sprintf("%v", tc.ListenPorts.SSLProxy))
+			} else {
+				l = append(l, fmt.Sprintf("%v:%v", address, tc.ListenPorts.SSLProxy))
+			}
+
+			l = append(l, "proxy_protocol")
+		} else {
+			if address == "" {
+				l = append(l, fmt.Sprintf("%v", tc.ListenPorts.HTTPS))
+			} else {
+				l = append(l, fmt.Sprintf("%v:%v", address, tc.ListenPorts.HTTPS))
+			}
+
+			if tc.Cfg.UseProxyProtocol {
+				l = append(l, "proxy_protocol")
+			}
+		}
+
+		l = append(l, co)
+		l = append(l, "ssl")
+
+		if tc.Cfg.UseHTTP2 {
+			l = append(l, "http2")
+		}
+
+		l = append(l, ";")
+		out = append(out, strings.Join(l, " "))
+	}
+
+	return out
 }
