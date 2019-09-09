@@ -1122,6 +1122,9 @@ stream {
             {{- range $line := buildAuthResponseHeaders $externalAuth.ResponseHeaders }}
             {{ $line }}
             {{- end }}
+            {{- range $line := buildAuthProxySetHeaders $externalAuth.ProxySetHeaders}}
+            {{ $line }}
+            {{- end }}
             {{ end }}
 
             {{ if $externalAuth.SigninURL }}

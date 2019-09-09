@@ -39,6 +39,9 @@ type Resolver interface {
 
 	// GetService searches for services containing the namespace and name using a the character /
 	GetService(string) (*apiv1.Service, error)
+
+	// GetConfigMap searches for configmaps containing the namespace and name using a the character /
+	GetConfigMap(string) (*apiv1.ConfigMap, error)
 }
 
 // AuthSSLCert contains the necessary information to do certificate based

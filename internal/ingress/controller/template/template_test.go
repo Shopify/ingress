@@ -389,6 +389,23 @@ func TestBuildAuthResponseHeaders(t *testing.T) {
 	}
 }
 
+func TestBuildAuthProxySetHeaders(t *testing.T) {
+	externalAuthResponseHeaders := map[string]string{
+		"header1": "value1",
+		"header2": "value2",
+	}
+	expected := []string{
+		"proxy_set_header 'header1' 'value1';",
+		"proxy_set_header 'header2' 'value2';",
+	}
+
+	headers := buildAuthProxySetHeaders(externalProxySetHeaders)
+
+	if !reflect.DeepEqual(expected, headers) {
+		t.Errorf("Expected \n'%v'\nbut returned \n'%v'", expected, headers)
+	}
+}
+
 func TestTemplateWithData(t *testing.T) {
 	pwd, _ := os.Getwd()
 	f, err := os.Open(path.Join(pwd, "../../../../test/data/config.json"))
@@ -874,7 +891,7 @@ func TestOpentracingPropagateContext(t *testing.T) {
 		&ingress.Location{BackendProtocol: "GRPC"}:  "opentracing_grpc_propagate_context",
 		&ingress.Location{BackendProtocol: "GRPCS"}: "opentracing_grpc_propagate_context",
 		&ingress.Location{BackendProtocol: "AJP"}:   "opentracing_propagate_context",
-		"not a location": "opentracing_propagate_context",
+		"not a location":                            "opentracing_propagate_context",
 	}
 
 	for loc, expectedDirective := range tests {
