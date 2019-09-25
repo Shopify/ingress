@@ -12,11 +12,8 @@ env:
 jobs:
   include:
   - stage: Static Check
-    before_script:
-    - go get golang.org/x/lint/golint
     script:
-    - build/run-in-docker.sh luacheck --codes -q rootfs/etc/nginx/lua/
-    - make static-check
+    - build/run-in-docker.sh make static-check
   - stage: Lua Unit Test
     script:
     - build/run-in-docker.sh make lua-test
