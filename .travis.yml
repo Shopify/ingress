@@ -29,6 +29,7 @@ jobs:
     - curl -Lo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.5.1/kind-linux-amd64
       && chmod +x kind && sudo mv kind /usr/local/bin/
     - go get github.com/onsi/ginkgo/ginkgo
+    - apt-get install parallel
     script: make kind-e2e-test
   - stage: publish amd64
     if: type = push AND branch = master AND repo = Shopify/ingress
