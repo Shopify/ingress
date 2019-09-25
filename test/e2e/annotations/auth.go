@@ -183,6 +183,37 @@ var _ = framework.IngressNginxDescribe("Annotations - Auth", func() {
 		Expect(resp.StatusCode).Should(Equal(http.StatusOK))
 	})
 
+	It("should return status code 200 when authentication is configured with a map and Authorization header is sent", func() {
+		host := "auth"
+
+		s := f.EnsureSecret(buildMapSecret("foo", "bar", "test", f.Namespace))
+
+		annotations := map[string]string{
+			"nginx.ingress.kubernetes.io/auth-type":        "basic",
+			"nginx.ingress.kubernetes.io/auth-secret":      s.Name,
+			"nginx.ingress.kubernetes.io/auth-secret-type": "auth-map",
+			"nginx.ingress.kubernetes.io/auth-realm":       "test auth",
+		}
+
+		ing := framework.NewSingleIngress(host, "/", host, f.Namespace, framework.EchoService, 80, &annotations)
+		f.EnsureIngress(ing)
+
+		f.WaitForNginxServer(host,
+			func(server string) bool {
+				return Expect(server).Should(ContainSubstring("server_name auth"))
+			})
+
+		resp, _, errs := gorequest.New().
+			Get(f.GetURL(framework.HTTP)).
+			Retry(10, 1*time.Second, http.StatusNotFound).
+			Set("Host", host).
+			SetBasicAuth("foo", "bar").
+			End()
+
+		Expect(errs).Should(BeEmpty())
+		Expect(resp.StatusCode).Should(Equal(http.StatusOK))
+	})
+
 	It("should return status code 500 when authentication is configured with invalid content and Authorization header is sent", func() {
 		host := "auth"
 
@@ -257,6 +288,27 @@ var _ = framework.IngressNginxDescribe("Annotations - Auth", func() {
 		f.WaitForNginxServer(host,
 			func(server string) bool {
 				return Expect(server).ShouldNot(ContainSubstring(`proxy_set_header My-Custom-Header 42;`))
+			})
+	})
+
+	It(`should set "proxy_set_header 'My-Custom-Header' '42';" when auth-headers are set`, func() {
+		host := "auth"
+
+		annotations := map[string]string{
+			"nginx.ingress.kubernetes.io/auth-url":               "http://foo.bar/basic-auth/user/password",
+			"nginx.ingress.kubernetes.io/auth-proxy-set-headers": f.Namespace + "/auth-headers",
+		}
+
+		f.CreateConfigMap("auth-headers", map[string]string{
+			"My-Custom-Header": "42",
+		})
+
+		ing := framework.NewSingleIngress(host, "/", host, f.Namespace, framework.EchoService, 80, &annotations)
+		f.EnsureIngress(ing)
+
+		f.WaitForNginxServer(host,
+			func(server string) bool {
+				return Expect(server).Should(ContainSubstring(`proxy_set_header 'My-Custom-Header' '42';`))
 			})
 	})
 
@@ -542,6 +594,23 @@ func buildSecret(username, password, name, namespace string) *corev1.Secret {
 		},
 		Data: map[string][]byte{
 			"auth": []byte(encpass),
+		},
+		Type: corev1.SecretTypeOpaque,
+	}
+}
+
+func buildMapSecret(username, password, name, namespace string) *corev1.Secret {
+	out, err := exec.Command("openssl", "passwd", "-crypt", password).CombinedOutput()
+	Expect(err).NotTo(HaveOccurred())
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:                       name,
+			Namespace:                  namespace,
+			DeletionGracePeriodSeconds: framework.NewInt64(1),
+		},
+		Data: map[string][]byte{
+			username: []byte(out),
 		},
 		Type: corev1.SecretTypeOpaque,
 	}

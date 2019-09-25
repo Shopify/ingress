@@ -67,6 +67,7 @@ import (
 
 const (
 	tempNginxPattern = "nginx-cfg"
+	emptyUID         = "-1"
 )
 
 // NewNGINXController creates a new NGINX Ingress controller.
@@ -603,11 +604,11 @@ func (n NGINXController) generateTemplate(cfg ngx_config.Configuration, ingressC
 		PublishService:           n.GetPublishService(),
 		EnableMetrics:            n.cfg.EnableMetrics,
 
-		HealthzURI:   nginx.HealthPath,
-		PID:          nginx.PID,
-		StatusPath:   nginx.StatusPath,
-		StatusPort:   nginx.StatusPort,
-		StreamSocket: nginx.StreamSocket,
+		HealthzURI: nginx.HealthPath,
+		PID:        nginx.PID,
+		StatusPath: nginx.StatusPath,
+		StatusPort: nginx.StatusPort,
+		StreamPort: nginx.StreamPort,
 	}
 
 	tc.Cfg.Checksum = ingressCfg.ConfigurationChecksum
@@ -794,9 +795,7 @@ func clearCertificates(config *ingress.Configuration) {
 	var clearedServers []*ingress.Server
 	for _, server := range config.Servers {
 		copyOfServer := *server
-		if copyOfServer.SSLCert != nil {
-			copyOfServer.SSLCert = &ingress.SSLCert{PemFileName: copyOfServer.SSLCert.PemFileName}
-		}
+		copyOfServer.SSLCert = nil
 		clearedServers = append(clearedServers, &copyOfServer)
 	}
 	config.Servers = clearedServers
@@ -923,16 +922,16 @@ func updateStreamConfiguration(TCPEndpoints []ingress.L4Service, UDPEndpoints []
 		})
 	}
 
-	conn, err := net.Dial("unix", nginx.StreamSocket)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-
 	buf, err := json.Marshal(streams)
 	if err != nil {
 		return err
 	}
+
+	conn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%v", nginx.StreamPort))
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
 
 	_, err = conn.Write(buf)
 	if err != nil {
@@ -1004,39 +1003,35 @@ func configureCertificates(rawServers []*ingress.Server) error {
 		Servers:      map[string]string{},
 	}
 
+	configure := func(hostname string, sslCert *ingress.SSLCert) {
+		uid := emptyUID
+
+		if sslCert != nil {
+			uid = sslCert.UID
+
+			if _, ok := configuration.Certificates[uid]; !ok {
+				configuration.Certificates[uid] = sslCert.PemCertKey
+			}
+		}
+
+		configuration.Servers[hostname] = uid
+	}
+
 	for _, rawServer := range rawServers {
-		if rawServer.SSLCert == nil {
-			continue
-		}
-
-		uid := rawServer.SSLCert.UID
-
-		if _, ok := configuration.Certificates[uid]; !ok {
-			configuration.Certificates[uid] = rawServer.SSLCert.PemCertKey
-		}
-
-		configuration.Servers[rawServer.Hostname] = uid
+		configure(rawServer.Hostname, rawServer.SSLCert)
 
 		for _, alias := range rawServer.Aliases {
-			if !ssl.IsValidHostname(alias, rawServer.SSLCert.CN) {
-				continue
+			if rawServer.SSLCert != nil && ssl.IsValidHostname(alias, rawServer.SSLCert.CN) {
+				configuration.Servers[alias] = rawServer.SSLCert.UID
+			} else {
+				configuration.Servers[alias] = emptyUID
 			}
-
-			configuration.Servers[alias] = uid
 		}
 	}
 
 	redirects := buildRedirects(rawServers)
 	for _, redirect := range redirects {
-		if redirect.SSLCert == nil {
-			continue
-		}
-
-		configuration.Servers[redirect.From] = redirect.SSLCert.UID
-
-		if _, ok := configuration.Certificates[redirect.SSLCert.UID]; !ok {
-			configuration.Certificates[redirect.SSLCert.UID] = redirect.SSLCert.PemCertKey
-		}
+		configure(redirect.From, redirect.SSLCert)
 	}
 
 	statusCode, _, err := nginx.NewPostStatusRequest("/configuration/servers", "application/json", configuration)
@@ -1067,7 +1062,13 @@ const jaegerTmpl = `{
   },
   "reporter": {
 	"localAgentHostPort": "{{ .JaegerCollectorHost }}:{{ .JaegerCollectorPort }}"
-  }
+  },
+  "headers": {
+	"TraceContextHeaderName": "{{ .JaegerTraceContextHeaderName }}",
+	"jaegerDebugHeader": "{{ .JaegerDebugHeader }}",
+	"jaegerBaggageHeader": "{{ .JaegerBaggageHeader }}",
+	"traceBaggageHeaderPrefix": "{{ .JaegerTraceBaggageHeaderPrefix }}"
+  },
 }`
 
 const datadogTmpl = `{

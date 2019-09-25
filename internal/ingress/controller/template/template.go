@@ -141,6 +141,7 @@ var (
 		"buildAuthLocation":               buildAuthLocation,
 		"shouldApplyGlobalAuth":           shouldApplyGlobalAuth,
 		"buildAuthResponseHeaders":        buildAuthResponseHeaders,
+		"buildAuthProxySetHeaders":        buildAuthProxySetHeaders,
 		"buildProxyPass":                  buildProxyPass,
 		"filterRateLimits":                filterRateLimits,
 		"buildRateLimitZones":             buildRateLimitZones,
@@ -151,7 +152,6 @@ var (
 		"buildUpstreamName":               buildUpstreamName,
 		"isLocationInLocationList":        isLocationInLocationList,
 		"isLocationAllowed":               isLocationAllowed,
-		"buildLogFormatUpstream":          buildLogFormatUpstream,
 		"buildDenyVariable":               buildDenyVariable,
 		"getenv":                          os.Getenv,
 		"contains":                        strings.Contains,
@@ -268,6 +268,8 @@ func buildLuaSharedDictionaries(c interface{}, s interface{}, disableLuaRestyWAF
 		}
 	}
 
+	sort.Strings(out)
+
 	return strings.Join(out, ";\n") + ";\n"
 }
 
@@ -300,20 +302,30 @@ func configForLua(input interface{}) string {
 		is_ssl_passthrough_enabled = %t,
 		http_redirect_code = %v,
 		listen_ports = { ssl_proxy = "%v", https = "%v" },
-	}`, all.Cfg.UseForwardedHeaders, all.IsSSLPassthroughEnabled, all.Cfg.HTTPRedirectCode, all.ListenPorts.SSLProxy, all.ListenPorts.HTTPS)
+
+		hsts = %t,
+		hsts_max_age = %v,
+		hsts_include_subdomains = %t,
+		hsts_preload = %t,
+	}`,
+		all.Cfg.UseForwardedHeaders,
+		all.IsSSLPassthroughEnabled,
+		all.Cfg.HTTPRedirectCode,
+		all.ListenPorts.SSLProxy,
+		all.ListenPorts.HTTPS,
+
+		all.Cfg.HSTS,
+		all.Cfg.HSTSMaxAge,
+		all.Cfg.HSTSIncludeSubdomains,
+		all.Cfg.HSTSPreload,
+	)
 }
 
 // locationConfigForLua formats some location specific configuration into Lua table represented as string
-func locationConfigForLua(l interface{}, s interface{}, a interface{}) string {
+func locationConfigForLua(l interface{}, a interface{}) string {
 	location, ok := l.(*ingress.Location)
 	if !ok {
 		klog.Errorf("expected an '*ingress.Location' type but %T was given", l)
-		return "{}"
-	}
-
-	server, ok := s.(*ingress.Server)
-	if !ok {
-		klog.Errorf("expected an '*ingress.Server' type but %T was given", s)
 		return "{}"
 	}
 
@@ -323,13 +335,17 @@ func locationConfigForLua(l interface{}, s interface{}, a interface{}) string {
 		return "{}"
 	}
 
-	forceSSLRedirect := location.Rewrite.ForceSSLRedirect || (server.SSLCert != nil && location.Rewrite.SSLRedirect)
-	forceSSLRedirect = forceSSLRedirect && !isLocationInLocationList(l, all.Cfg.NoTLSRedirectLocations)
-
 	return fmt.Sprintf(`{
 		force_ssl_redirect = %t,
+		ssl_redirect = %t,
+		force_no_ssl_redirect = %t,
 		use_port_in_redirects = %t,
-	}`, forceSSLRedirect, location.UsePortInRedirects)
+	}`,
+		location.Rewrite.ForceSSLRedirect,
+		location.Rewrite.SSLRedirect,
+		isLocationInLocationList(l, all.Cfg.NoTLSRedirectLocations),
+		location.UsePortInRedirects,
+	)
 }
 
 // buildResolvers returns the resolvers reading the /etc/resolv.conf file
@@ -462,14 +478,18 @@ func buildAuthResponseHeaders(headers []string) []string {
 	return res
 }
 
-func buildLogFormatUpstream(input interface{}) string {
-	cfg, ok := input.(config.Configuration)
-	if !ok {
-		klog.Errorf("expected a 'config.Configuration' type but %T was returned", input)
-		return ""
+func buildAuthProxySetHeaders(headers map[string]string) []string {
+	res := []string{}
+
+	if len(headers) == 0 {
+		return res
 	}
 
-	return cfg.BuildLogFormatUpstream()
+	for name, value := range headers {
+		res = append(res, fmt.Sprintf("proxy_set_header '%v' '%v';", name, value))
+	}
+	sort.Strings(res)
+	return res
 }
 
 // buildProxyPass produces the proxy pass string, if the ingress has redirects

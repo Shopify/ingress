@@ -151,16 +151,15 @@ func TestIsDynamicConfigurationEnough(t *testing.T) {
 func TestConfigureDynamically(t *testing.T) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", nginx.StatusPort))
 	if err != nil {
-		t.Fatalf("crating unix listener: %s", err)
+		t.Fatalf("crating tcp listener: %s", err)
 	}
 	defer listener.Close()
 
-	streamListener, err := net.Listen("unix", nginx.StreamSocket)
+	streamListener, err := net.Listen("tcp", fmt.Sprintf(":%v", nginx.StreamPort))
 	if err != nil {
-		t.Fatalf("crating unix listener: %s", err)
+		t.Fatalf("crating tcp listener: %s", err)
 	}
 	defer streamListener.Close()
-	defer os.Remove(nginx.StreamSocket)
 
 	endpointStats := map[string]int{"/configuration/backends": 0, "/configuration/general": 0, "/configuration/servers": 0}
 	resetEndpointStats := func() {
@@ -206,7 +205,7 @@ func TestConfigureDynamically(t *testing.T) {
 					}
 				case "/configuration/servers":
 					{
-						if !strings.Contains(body, `{"certificates":{},"servers":{}}`) {
+						if !strings.Contains(body, `{"certificates":{},"servers":{"myapp.fake":"-1"}}`) {
 							t.Errorf("controllerPodsCount should be present in JSON content: %v", body)
 						}
 					}
@@ -321,24 +320,28 @@ func TestConfigureDynamically(t *testing.T) {
 func TestConfigureCertificates(t *testing.T) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", nginx.StatusPort))
 	if err != nil {
-		t.Fatalf("crating unix listener: %s", err)
+		t.Fatalf("crating tcp listener: %s", err)
 	}
 	defer listener.Close()
 
-	streamListener, err := net.Listen("unix", nginx.StreamSocket)
+	streamListener, err := net.Listen("tcp", fmt.Sprintf(":%v", nginx.StreamPort))
 	if err != nil {
-		t.Fatalf("crating unix listener: %s", err)
+		t.Fatalf("crating tcp listener: %s", err)
 	}
 	defer streamListener.Close()
-	defer os.Remove(nginx.StreamSocket)
 
-	servers := []*ingress.Server{{
-		Hostname: "myapp.fake",
-		SSLCert: &ingress.SSLCert{
-			PemCertKey: "fake-cert",
-			UID:        "c89a5111-b2e9-4af8-be19-c2a4a924c256",
+	servers := []*ingress.Server{
+		{
+			Hostname: "myapp.fake",
+			SSLCert: &ingress.SSLCert{
+				PemCertKey: "fake-cert",
+				UID:        "c89a5111-b2e9-4af8-be19-c2a4a924c256",
+			},
 		},
-	}}
+		{
+			Hostname: "myapp.nossl",
+		},
+	}
 
 	server := &httptest.Server{
 		Listener: listener,
@@ -365,8 +368,14 @@ func TestConfigureCertificates(t *testing.T) {
 				}
 
 				for _, server := range servers {
-					if server.SSLCert.UID != conf.Servers[server.Hostname] {
-						t.Errorf("Expected servers and posted servers to be equal")
+					if server.SSLCert == nil {
+						if conf.Servers[server.Hostname] != emptyUID {
+							t.Errorf("Expected server %s to have UID of %s but got %s", server.Hostname, emptyUID, conf.Servers[server.Hostname])
+						}
+					} else {
+						if server.SSLCert.UID != conf.Servers[server.Hostname] {
+							t.Errorf("Expected server %s to have UID of %s but got %s", server.Hostname, server.SSLCert.UID, conf.Servers[server.Hostname])
+						}
 					}
 				}
 			}),

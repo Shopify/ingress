@@ -37,7 +37,7 @@ export LUA_BRIDGE_TRACER_VERSION=0.1.1
 export NGINX_INFLUXDB_VERSION=5b09391cb7b9a889687c0aa67964c06a2d933e8b
 export GEOIP2_VERSION=3.2
 export NGINX_AJP_VERSION=bf6cd93f2098b59260de8d494f0f4b1f11a84627
-export RESTY_LUAROCKS_VERSION=3.2.0
+export RESTY_LUAROCKS_VERSION=3.1.3
 export LUA_RESTY_BALANCER_VERSION=0.03
 
 export BUILD_PATH=/tmp/build
@@ -166,7 +166,7 @@ get_src 15bd1005228cf2c869a6f09e8c41a6aaa6846e4936c473106786ae8ac860fab7 \
 get_src 5f629a50ba22347c441421091da70fdc2ac14586619934534e5a0f8a1390a950 \
         "https://github.com/yaoweibin/nginx_ajp_module/archive/$NGINX_AJP_VERSION.tar.gz"
 
-get_src 66c1848a25924917ddc1901e865add8f19f2585360c44a001a03a8c234d3e796 \
+get_src c573435f495aac159e34eaa0a3847172a2298eb6295fcdc35d565f9f9b990513 \
         "https://luarocks.github.io/luarocks/releases/luarocks-${RESTY_LUAROCKS_VERSION}.tar.gz"
 
 get_src 82209d5a5d9545c6dde3db7857f84345db22162fdea9743d5e2b2094d8d407f8 \
@@ -332,8 +332,8 @@ cp unicode.mapping /etc/nginx/modsecurity/unicode.mapping
 # Replace serial logging with concurrent
 sed -i 's|SecAuditLogType Serial|SecAuditLogType Concurrent|g' /etc/nginx/modsecurity/modsecurity.conf
 
-# Use stdout for modsecurity logs
-sed -i 's|SecAuditLog /var/log/modsec_audit.log|SecAuditLog /dev/stdout|g' /etc/nginx/modsecurity/modsecurity.conf
+# Concurrent logging implies the log is stored in several files
+echo "SecAuditLogStorageDir /var/log/audit/" >> /etc/nginx/modsecurity/modsecurity.conf
 
 # Download owasp modsecurity crs
 cd /etc/nginx/
@@ -475,7 +475,12 @@ cd /usr/local/openresty
 export LUA_LIB_DIR=/usr/local/openresty/lualib
 export LUA_INCLUDE_DIR=/tmp/build/openresty-$OPENRESTY_VERSION/build/luajit-root/usr/local/openresty/luajit/include/luajit-2.1
 
-luarocks install lrexlib-pcre 2.7.2-1 PCRE_LIBDIR=${PCRE_DIR}
+ln -s $LUA_INCLUDE_DIR /usr/include/lua5.1
+
+if [[ ${ARCH} != "armv7l" ]]; then
+  luarocks install lrexlib-pcre 2.7.2-1 PCRE_LIBDIR=${PCRE_DIR}
+fi
+
 luarocks install lua-resty-iputils 0.3.0-1
 luarocks install lua-resty-cookie 0.1.0-1
 
@@ -483,8 +488,6 @@ cd "$BUILD_PATH/lua-resty-balancer-$LUA_RESTY_BALANCER_VERSION"
 
 make
 make install
-
-ln -s $LUA_INCLUDE_DIR /usr/include/lua5.1
 
 if [[ ${ARCH} != "armv7l" ]]; then
   /install_lua_resty_waf.sh
@@ -573,6 +576,7 @@ writeDirs=( \
   /opt/modsecurity/var/log \
   /opt/modsecurity/var/upload \
   /opt/modsecurity/var/audit \
+  /var/log/audit \
 );
 
 for dir in "${writeDirs[@]}"; do

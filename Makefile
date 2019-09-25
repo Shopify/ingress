@@ -58,11 +58,15 @@ GOOS = linux
 
 MULTI_ARCH_IMAGE = $(REGISTRY)/nginx-ingress-controller-${ARCH}
 
+# use vendor directory instead of go modules https://github.com/golang/go/wiki/Modules
+GO111MODULE=off
+
 export ARCH
 export TAG
 export PKG
 export GOARCH
 export GOOS
+export GO111MODULE
 export GIT_COMMIT
 export GOBUILD_FLAGS
 export REPO_INFO
@@ -73,7 +77,7 @@ export E2E_CHECK_LEAKS
 export SLOW_E2E_THRESHOLD
 
 # Set default base image dynamically for each arch
-BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):0.92
+BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):daf8634acf839708722cffc67a62e9316a2771c6
 
 ifeq ($(ARCH),arm)
 	QEMUARCH=arm
@@ -206,9 +210,9 @@ check_dead_links:
 
 .PHONY: dep-ensure
 dep-ensure:
-	GO111MODULE=on go mod tidy -v
+	go mod tidy -v
 	find vendor -name '*_test.go' -delete
-	GO111MODULE=on go mod vendor
+	go mod vendor
 
 .PHONY: dev-env
 dev-env:

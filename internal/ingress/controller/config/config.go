@@ -17,7 +17,6 @@ limitations under the License.
 package config
 
 import (
-	"fmt"
 	"strconv"
 	"time"
 
@@ -55,7 +54,7 @@ const (
 
 	brotliTypes = "application/xml+rss application/atom+xml application/javascript application/x-javascript application/json application/rss+xml application/vnd.ms-fontobject application/x-font-ttf application/x-web-app-manifest+json application/xhtml+xml application/xml font/opentype image/svg+xml image/x-icon text/css text/javascript text/plain text/x-component"
 
-	logFormatUpstream = `%v - [$the_real_ip] - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] [$proxy_alternative_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status $req_id`
+	logFormatUpstream = `$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] [$proxy_alternative_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status $req_id`
 
 	logFormatStream = `[$time_local] $protocol $status $bytes_sent $bytes_received $session_time`
 
@@ -515,6 +514,22 @@ type Configuration struct {
 	// Default: 5778
 	JaegerSamplerPort int `json:"jaeger-sampler-port"`
 
+	// JaegerTraceContextHeaderName specifies the header name used for passing trace context
+	// Default: uber-trace-id
+	JaegerTraceContextHeaderName string `json:"jaeger-trace-context-header-name"`
+
+	// JaegerDebugHeader specifies the header name used for force sampling
+	// Default: jaeger-debug-id
+	JaegerDebugHeader string `json:"jaeger-debug-header"`
+
+	// JaegerBaggageHeader specifies the header name used to submit baggage if there is no root span
+	// Default: jaeger-baggage
+	JaegerBaggageHeader string `json:"jaeger-baggage-header"`
+
+	// TraceBaggageHeaderPrefix specifies the header prefix used to propagate baggage
+	// Default: uberctx-
+	JaegerTraceBaggageHeaderPrefix string `json:"jaeger-tracer-baggage-header-prefix"`
+
 	// DatadogCollectorHost specifies the datadog agent host to use when uploading traces
 	DatadogCollectorHost string `json:"datadog-collector-host"`
 
@@ -630,7 +645,7 @@ func NewDefault() Configuration {
 	defNginxStatusIpv4Whitelist = append(defNginxStatusIpv4Whitelist, "127.0.0.1")
 	defNginxStatusIpv6Whitelist = append(defNginxStatusIpv6Whitelist, "::1")
 	defProxyDeadlineDuration := time.Duration(5) * time.Second
-	defGlobalExternalAuth := GlobalExternalAuth{"", "", "", "", append(defResponseHeaders, ""), "", "", "", []string{}}
+	defGlobalExternalAuth := GlobalExternalAuth{"", "", "", "", append(defResponseHeaders, ""), "", "", "", []string{}, map[string]string{}}
 
 	cfg := Configuration{
 		AllowBackendServerHeader:         false,
@@ -653,7 +668,7 @@ func NewDefault() Configuration {
 		UseForwardedHeaders:              false,
 		ForwardedForHeader:               "X-Forwarded-For",
 		ComputeFullForwardedFor:          false,
-		ProxyAddOriginalURIHeader:        true,
+		ProxyAddOriginalURIHeader:        false,
 		GenerateRequestID:                true,
 		HTTP2MaxFieldSize:                "4k",
 		HTTP2MaxHeaderSize:               "16k",
@@ -763,17 +778,6 @@ func NewDefault() Configuration {
 	return cfg
 }
 
-// BuildLogFormatUpstream format the log_format upstream using
-// proxy_protocol_addr as remote client address if UseProxyProtocol
-// is enabled.
-func (cfg Configuration) BuildLogFormatUpstream() string {
-	if cfg.LogFormatUpstream == logFormatUpstream {
-		return fmt.Sprintf(cfg.LogFormatUpstream, "$the_real_ip")
-	}
-
-	return cfg.LogFormatUpstream
-}
-
 // TemplateConfig contains the nginx configuration to render the file nginx.conf
 type TemplateConfig struct {
 	ProxySetHeaders          map[string]string
@@ -795,10 +799,10 @@ type TemplateConfig struct {
 	PublishService           *apiv1.Service
 	EnableMetrics            bool
 
-	PID          string
-	StatusPath   string
-	StatusPort   int
-	StreamSocket string
+	PID        string
+	StatusPath string
+	StatusPort int
+	StreamPort int
 }
 
 // ListenPorts describe the ports required to run the
@@ -816,12 +820,13 @@ type ListenPorts struct {
 type GlobalExternalAuth struct {
 	URL string `json:"url"`
 	// Host contains the hostname defined in the URL
-	Host              string   `json:"host"`
-	SigninURL         string   `json:"signinUrl"`
-	Method            string   `json:"method"`
-	ResponseHeaders   []string `json:"responseHeaders,omitempty"`
-	RequestRedirect   string   `json:"requestRedirect"`
-	AuthSnippet       string   `json:"authSnippet"`
-	AuthCacheKey      string   `json:"authCacheKey"`
-	AuthCacheDuration []string `json:"authCacheDuration"`
+	Host              string            `json:"host"`
+	SigninURL         string            `json:"signinUrl"`
+	Method            string            `json:"method"`
+	ResponseHeaders   []string          `json:"responseHeaders,omitempty"`
+	RequestRedirect   string            `json:"requestRedirect"`
+	AuthSnippet       string            `json:"authSnippet"`
+	AuthCacheKey      string            `json:"authCacheKey"`
+	AuthCacheDuration []string          `json:"authCacheDuration"`
+	ProxySetHeaders   map[string]string `json:"proxySetHeaders,omitempty"`
 }

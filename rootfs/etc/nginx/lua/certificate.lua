@@ -48,6 +48,16 @@ local function get_pem_cert_key(raw_hostname)
   return pem_cert_key
 end
 
+function _M.configured_for_current_request()
+  if ngx.ctx.configured_for_current_request ~= nil then
+    return ngx.ctx.configured_for_current_request
+  end
+
+  ngx.ctx.configured_for_current_request = get_pem_cert_key(ngx.var.host) ~= nil
+
+  return ngx.ctx.configured_for_current_request
+end
+
 function _M.call()
   local hostname, hostname_err = ssl.server_name()
   if hostname_err then

@@ -17,8 +17,10 @@ You can add these Kubernetes annotations to specific Ingress objects to customiz
 |---------------------------|------|
 |[nginx.ingress.kubernetes.io/app-root](#rewrite)|string|
 |[nginx.ingress.kubernetes.io/affinity](#session-affinity)|cookie|
+|[nginx.ingress.kubernetes.io/affinity-mode](#session-affinity)|"balanced" or "persistent"|
 |[nginx.ingress.kubernetes.io/auth-realm](#authentication)|string|
 |[nginx.ingress.kubernetes.io/auth-secret](#authentication)|string|
+|[nginx.ingress.kubernetes.io/auth-secret-type](#authentication)|string|
 |[nginx.ingress.kubernetes.io/auth-type](#authentication)|basic or digest|
 |[nginx.ingress.kubernetes.io/auth-tls-secret](#client-certificate-authentication)|string|
 |[nginx.ingress.kubernetes.io/auth-tls-verify-depth](#client-certificate-authentication)|number|
@@ -28,6 +30,7 @@ You can add these Kubernetes annotations to specific Ingress objects to customiz
 |[nginx.ingress.kubernetes.io/auth-url](#external-authentication)|string|
 |[nginx.ingress.kubernetes.io/auth-cache-key](#external-authentication)|string|
 |[nginx.ingress.kubernetes.io/auth-cache-duration](#external-authentication)|string|
+|[nginx.ingress.kubernetes.io/auth-proxy-set-headers](#external-authentication)|string|
 |[nginx.ingress.kubernetes.io/auth-snippet](#external-authentication)|string|
 |[nginx.ingress.kubernetes.io/enable-global-auth](#external-authentication)|"true" or "false"|
 |[nginx.ingress.kubernetes.io/backend-protocol](#backend-protocol)|string|HTTP,HTTPS,GRPC,GRPCS,AJP|
@@ -151,6 +154,8 @@ If the Application Root is exposed in a different path and needs to be redirecte
 The annotation `nginx.ingress.kubernetes.io/affinity` enables and sets the affinity type in all Upstreams of an Ingress. This way, a request will always be directed to the same upstream server.
 The only affinity type available for NGINX is `cookie`.
 
+The annotation `nginx.ingress.kubernetes.io/affinity-mode` defines the stickyness of a session. Setting this to `balanced` (default) will redistribute some sessions if a deployment gets scaled up, therefore rebalancing the load on the servers. Setting this to `persistent` will not rebalance sessions to new servers, therefore providing maximum stickyness.
+
 !!! attention
     If more than one Ingress is defined for a host and at least one Ingress uses `nginx.ingress.kubernetes.io/affinity: cookie`, then only paths on the Ingress using `nginx.ingress.kubernetes.io/affinity` will use session cookie affinity. All paths defined on other Ingresses for the host will be load balanced through the random selection of a backend server.
 
@@ -166,7 +171,7 @@ The NGINX annotation `nginx.ingress.kubernetes.io/session-cookie-path` defines t
 
 ### Authentication
 
-Is possible to add authentication adding additional annotations in the Ingress rule. The source of the authentication is a secret that contains usernames and passwords inside the key `auth`.
+Is possible to add authentication adding additional annotations in the Ingress rule. The source of the authentication is a secret that contains usernames and passwords.
 
 The annotations are:
 ```
@@ -181,6 +186,15 @@ nginx.ingress.kubernetes.io/auth-secret: secretName
 
 The name of the Secret that contains the usernames and passwords which are granted access to the `path`s defined in the Ingress rules.
 This annotation also accepts the alternative form "namespace/secretName", in which case the Secret lookup is performed in the referenced namespace instead of the Ingress namespace.
+
+```
+nginx.ingress.kubernetes.io/auth-secret-type: [auth-file|auth-map]
+```
+
+The `auth-secret` can have two forms:
+
+- `auth-file` - default, an htpasswd file in the key `auth` within the secret
+- `auth-map` - the keys of the secret are the usernames, and the values are the hashed passwords
 
 ```
 nginx.ingress.kubernetes.io/auth-realm: "realm string"
@@ -401,6 +415,8 @@ Additionally it is possible to set:
   `<SignIn_URL>` to specify the location of the error page.
 * `nginx.ingress.kubernetes.io/auth-response-headers`:
   `<Response_Header_1, ..., Response_Header_n>` to specify headers to pass to backend once authentication request completes.
+* `nginx.ingress.kubernetes.io/auth-proxy-set-headers`:
+  `<ConfigMap>` the name of a ConfigMap that specifies headers to pass to the authentication service
 * `nginx.ingress.kubernetes.io/auth-request-redirect`:
   `<Request_Redirect_URL>`  to specify the X-Auth-Request-Redirect header value.
 * `nginx.ingress.kubernetes.io/auth-cache-key`:

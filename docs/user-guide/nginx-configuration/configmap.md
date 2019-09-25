@@ -58,7 +58,7 @@ The following table shows a configuration option's name, type, and the default v
 |[keep-alive-requests](#keep-alive-requests)|int|100|
 |[large-client-header-buffers](#large-client-header-buffers)|string|"4 8k"|
 |[log-format-escape-json](#log-format-escape-json)|bool|"false"|
-|[log-format-upstream](#log-format-upstream)|string|`%v - [$the_real_ip] - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status $req_id`|
+|[log-format-upstream](#log-format-upstream)|string|`$remote_addr - $remote_user [$time_local] "$request" $status $body_bytes_sent "$http_referer" "$http_user_agent" $request_length $request_time [$proxy_upstream_name] [$proxy_alternative_upstream_name] $upstream_addr $upstream_response_length $upstream_response_time $upstream_status $req_id`|
 |[log-format-stream](#log-format-stream)|string|`[$time_local] $protocol $status $bytes_sent $bytes_received $session_time`|
 |[enable-multi-accept](#enable-multi-accept)|bool|"true"|
 |[max-worker-connections](#max-worker-connections)|int|16384|
@@ -111,7 +111,7 @@ The following table shows a configuration option's name, type, and the default v
 |[use-forwarded-headers](#use-forwarded-headers)|bool|"false"|
 |[forwarded-for-header](#forwarded-for-header)|string|"X-Forwarded-For"|
 |[compute-full-forwarded-for](#compute-full-forwarded-for)|bool|"false"|
-|[proxy-add-original-uri-header](#proxy-add-original-uri-header)|bool|"true"|
+|[proxy-add-original-uri-header](#proxy-add-original-uri-header)|bool|"false"|
 |[generate-request-id](#generate-request-id)|bool|"true"|
 |[enable-opentracing](#enable-opentracing)|bool|"false"|
 |[zipkin-collector-host](#zipkin-collector-host)|string|""|
@@ -125,6 +125,10 @@ The following table shows a configuration option's name, type, and the default v
 |[jaeger-sampler-param](#jaeger-sampler-param)|string|"1"|
 |[jaeger-sampler-host](#jaeger-sampler-host)|string|"http://127.0.0.1"|
 |[jaeger-sampler-port](#jaeger-sampler-port)|int|5778|
+|[jaeger-trace-context-header-name](#jaeger-trace-context-header-name)|string|uber-trace-id|
+|[jaeger-debug-header](#jaeger-debug-header)|string|uber-debug-id|
+|[jaeger-baggage-header](#jaeger-baggage-header)|string|jaeger-baggage|
+|[jaeger-trace-baggage-header-prefix](#jaeger-trace-baggage-header-prefix)|string|uberctx-|
 |[main-snippet](#main-snippet)|string|""|
 |[http-snippet](#http-snippet)|string|""|
 |[server-snippet](#server-snippet)|string|""|
@@ -746,6 +750,22 @@ Leave blank to use default value (localhost). _**default:**_ http://127.0.0.1
 ## jaeger-sampler-port
 
 Specifies the custom remote sampler port to be passed to the sampler constructor. Must be a number. _**default:**_ 5778
+
+## jaeger-trace-context-header-name
+
+Specifies the header name used for passing trace context. _**default:**_ uber-trace-id
+
+## jaeger-debug-header
+
+Specifies the header name used for force sampling. _**default:**_ jaeger-debug-id
+
+## jaeger-baggage-header
+
+Specifies the header name used to submit baggage if there is no root span. _**default:**_ jaeger-baggage
+
+## jaeger-tracer-baggage-header-prefix
+
+Specifies the header prefix used to propagate baggage. _**default:**_ uberctx-
 
 ## main-snippet
 
