@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-KIND_LOG_LEVEL="info"
+KIND_LOG_LEVEL="debug"
 
 if ! [ -z $DEBUG ]; then
   set -x

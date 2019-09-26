@@ -11,20 +11,14 @@ env:
   - secure: k8hjJCXnCiVjRmpW/g/Vwv0m29hZQCDA6tT9pzkWQFgf0WHzCBolwZ8cwqjRewoyOLU2VSjklDWtoUSHWUXrj9u9y8r01ogwvdWKWbq0Krwse/iqHeZL5EPD8kT+n4yoKy0ek5FH0CXONWF5wi4BRMh48XucRGAYUrePhFx0FwkK+WJE3GFHcWfSiBy1lBXtJRtm5lXDzZWkYixch/7jZnxcReZSEKzcYWrHXVCOzNcKgYuIOlbCwXqd5cbdxyY9wTCQdtlmJXf8HbjfO/O5YN5t06SCL2j+Qz8+wOmG4CIA5C1hZLH0z6gBD+2hEaqD8pDpfbNZxqjdUe+xEwGiFyFRCHUWjrs5ZIrMjVz/9kSDvzIWKBR8IhqV96KP054qIJuz8iFGTpFV4ytl9cSwOdYdh783kbWuJl2tzQzH9CaeMa93MWK9iE6ItiocmsN/tg+UN236s0BAjqkeg+Brb4WPB3a+Xwr61Bofn9pwk15PIajE9ycBPGtAPvTk7HMB/W1b7s8YiyAwCjb6yaTo1RX/IeFIh7K1HhbiWca24wxxDe4E1VZEu6/NClkMO1kDaLOlQRyrO10bq6s1cP17poyqlIjPmYXgRQEp5Q01kAaPYNylh8/cDsV5SO6cX39d/Hvzf32670aeC+t5p/0BRkcTMjUCU+0Jpum/frMbKl8=
 jobs:
   include:
-  - stage: Static Check
-    script:
-    - build/run-in-docker.sh make static-check
-  - stage: Lua Unit Test
-    script:
-    - build/run-in-docker.sh make lua-test
-  - stage: Go Unit Test
-    script:
-    - build/run-in-docker.sh make test
   - stage: e2e
+    env:
+      - KUBETEST_IN_DOCKER="true"
+      - K8S_RELEASE=v1.15.3
+      - KIND_VERSION=v0.5.1
     if: commit_message !~ /(skip-e2e)/
     before_script:
-    - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s
-      https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/kubectl
       && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
     - curl -Lo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.5.1/kind-linux-amd64
       && chmod +x kind && sudo mv kind /usr/local/bin/

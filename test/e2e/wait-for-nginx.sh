@@ -15,6 +15,7 @@
 # limitations under the License.
 
 set -e
+set -x
 if ! [ -z $DEBUG ]; then
 	set -x
 fi
@@ -77,6 +78,18 @@ EOF
 fi
 
 kubectl apply --kustomize "$OVERLAY"
+
+kubectl describe deploy nginx-ingress-controller -n $NAMESPACE
+sleep 10
+kubectl describe deploy nginx-ingress-controller -n $NAMESPACE
+
+echo "\n===========================\n"
+kubectl get po -owide -n $NAMESPACE
+echo "\n===========================\n"
+POD="$(kubectl get po -n ingress-nginx | grep nginx | awk '{print $1}')"
+kubectl exec -it $POD -n $NAMESPACE -- cat /etc/nginx/nginx.conf
+echo "\n===========================\n"
+kubectl logs -f deployment/nginx-ingress-controller -n $NAMESPACE
 
 # wait for the deployment and fail if there is an error before starting the execution of any test
 kubectl rollout status \
