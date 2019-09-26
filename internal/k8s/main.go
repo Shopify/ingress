@@ -122,14 +122,13 @@ func NetworkingIngressAvailable(client clientset.Interface) bool {
 		return false
 	}
 
-	serverVersion, _ := client.Discovery().ServerVersion()
+	serverVersion, err := client.Discovery().ServerVersion()
 	if err != nil {
 		klog.Errorf("unexpected error parsing Kubernetes version: %v", err)
 		return false
 	}
 
-	klog.Errorf("%v", serverVersion)
-	runningVersion, _ := version.ParseGeneric(serverVersion.String())
+	runningVersion, err := version.ParseGeneric(serverVersion.String())
 	if err != nil {
 		klog.Errorf("unexpected error parsing running Kubernetes version: %v", err)
 		return false

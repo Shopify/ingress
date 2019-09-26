@@ -16,7 +16,7 @@
 all: all-container
 
 # Use the 0.0 tag for testing, it shouldn't clobber any release builds
-TAG ?= 0.25.0
+TAG ?= 0.25.1
 REGISTRY ?= quay.io/kubernetes-ingress-controller
 DOCKER ?= docker
 SED_I ?= sed -i
@@ -44,29 +44,29 @@ PKG = k8s.io/ingress-nginx
 
 ARCH ?= $(shell go env GOARCH)
 GOARCH = ${ARCH}
-DUMB_ARCH = ${ARCH}
+
 
 GOBUILD_FLAGS := -v
 
 ALL_ARCH = amd64 arm arm64
 
-QEMUVERSION = v4.0.0
+QEMUVERSION = v4.1.0-1
 
 BUSTED_ARGS =-v --pattern=_test
 
 GOOS = linux
 
-IMGNAME = nginx-ingress-controller
-IMAGE = $(REGISTRY)/$(IMGNAME)
+MULTI_ARCH_IMAGE = $(REGISTRY)/nginx-ingress-controller-${ARCH}
 
-MULTI_ARCH_IMG = ${IMAGE}-${ARCH}
+# use vendor directory instead of go modules https://github.com/golang/go/wiki/Modules
+GO111MODULE=off
 
 export ARCH
-export DUMB_ARCH
 export TAG
 export PKG
 export GOARCH
 export GOOS
+export GO111MODULE
 export GIT_COMMIT
 export GOBUILD_FLAGS
 export REPO_INFO
@@ -77,7 +77,7 @@ export E2E_CHECK_LEAKS
 export SLOW_E2E_THRESHOLD
 
 # Set default base image dynamically for each arch
-BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):0.90
+BASEIMAGE?=quay.io/kubernetes-ingress-controller/nginx-$(ARCH):daf8634acf839708722cffc67a62e9316a2771c6
 
 ifeq ($(ARCH),arm)
 	QEMUARCH=arm
@@ -116,11 +116,11 @@ container: clean-container .container-$(ARCH)
 	mkdir -p $(TEMP_DIR)/rootfs
 	cp bin/$(ARCH)/nginx-ingress-controller $(TEMP_DIR)/rootfs/nginx-ingress-controller
 	cp bin/$(ARCH)/dbg $(TEMP_DIR)/rootfs/dbg
+	cp bin/$(ARCH)/wait-shutdown $(TEMP_DIR)/rootfs/wait-shutdown
 
 	cp -RP ./* $(TEMP_DIR)
 	$(SED_I) "s|BASEIMAGE|$(BASEIMAGE)|g" $(DOCKERFILE)
 	$(SED_I) "s|QEMUARCH|$(QEMUARCH)|g" $(DOCKERFILE)
-	$(SED_I) "s|DUMB_ARCH|$(DUMB_ARCH)|g" $(DOCKERFILE)
 
 ifeq ($(ARCH),amd64)
 	# When building "normally" for amd64, remove the whole line, it has no part in the amd64 image
@@ -131,16 +131,13 @@ else
 	$(SED_I) "s/CROSS_BUILD_//g" $(DOCKERFILE)
 endif
 
-	@$(DOCKER) build --no-cache --pull -t $(MULTI_ARCH_IMG):$(TAG) $(TEMP_DIR)/rootfs
+	echo "Building docker image..."
+	$(DOCKER) build --no-cache --pull -t $(MULTI_ARCH_IMAGE):$(TAG) $(TEMP_DIR)/rootfs
 
-ifeq ($(ARCH), amd64)
-	# This is for maintaining backward compatibility
-	@$(DOCKER) tag $(MULTI_ARCH_IMG):$(TAG) $(IMAGE):$(TAG)
-endif
 
 .PHONY: clean-container
 clean-container:
-	@$(DOCKER) rmi -f $(MULTI_ARCH_IMG):$(TAG) || true
+	@$(DOCKER) rmi -f $(MULTI_ARCH_IMAGE):$(TAG) || true
 
 .PHONY: register-qemu
 register-qemu:
@@ -152,10 +149,7 @@ push: .push-$(ARCH)
 
 .PHONY: .push-$(ARCH)
 .push-$(ARCH):
-	$(DOCKER) push $(MULTI_ARCH_IMG):$(TAG)
-ifeq ($(ARCH), amd64)
-	$(DOCKER) push $(IMAGE):$(TAG)
-endif
+	$(DOCKER) push $(MULTI_ARCH_IMAGE):$(TAG)
 
 .PHONY: build
 build:
@@ -216,9 +210,9 @@ check_dead_links:
 
 .PHONY: dep-ensure
 dep-ensure:
-	GO111MODULE=on go mod tidy -v
+	go mod tidy -v
 	find vendor -name '*_test.go' -delete
-	GO111MODULE=on go mod vendor
+	go mod vendor
 
 .PHONY: dev-env
 dev-env:
@@ -226,12 +220,12 @@ dev-env:
 
 .PHONY: live-docs
 live-docs:
-	@docker build --pull -t ingress-nginx/mkdocs build/mkdocs
+	@docker build --pull -t ingress-nginx/mkdocs images/mkdocs
 	@docker run --rm -it -p 3000:3000 -v ${PWD}:/docs ingress-nginx/mkdocs
 
 .PHONY: build-docs
 build-docs:
-	@docker build --pull -t ingress-nginx/mkdocs build/mkdocs
+	@docker build --pull -t ingress-nginx/mkdocs images/mkdocs
 	@docker run --rm -v ${PWD}:/docs ingress-nginx/mkdocs build
 
 .PHONY: misspell

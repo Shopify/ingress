@@ -57,7 +57,7 @@ var _ = framework.IngressNginxDescribe("Status Update [Status]", func() {
 				// flags --publish-service and --publish-status-address are mutually exclusive
 				var index int
 				for k, v := range args {
-					if strings.Index(v, "--publish-service") != -1 {
+					if strings.Contains(v, "--publish-service") {
 						index = k
 						break
 					}
@@ -74,7 +74,7 @@ var _ = framework.IngressNginxDescribe("Status Update [Status]", func() {
 
 		f.NewEchoDeploymentWithReplicas(1)
 
-		ing := f.EnsureIngress(framework.NewSingleIngress(host, "/", host, f.Namespace, "http-svc", 80, nil))
+		ing := f.EnsureIngress(framework.NewSingleIngress(host, "/", host, f.Namespace, framework.EchoService, 80, nil))
 
 		f.WaitForNginxConfiguration(
 			func(cfg string) bool {
