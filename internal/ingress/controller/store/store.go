@@ -152,9 +152,9 @@ func (e NotExistsError) Error() string {
 
 // Run initiates the synchronization of the informers against the API server.
 func (i *Informer) Run(stopCh chan struct{}) {
+	go i.Secret.Run(stopCh)
 	go i.Endpoint.Run(stopCh)
 	go i.Service.Run(stopCh)
-	go i.Secret.Run(stopCh)
 	go i.ConfigMap.Run(stopCh)
 	go i.Pod.Run(stopCh)
 
@@ -165,8 +165,9 @@ func (i *Informer) Run(stopCh chan struct{}) {
 		i.Service.HasSynced,
 		i.Secret.HasSynced,
 		i.ConfigMap.HasSynced,
+		i.Pod.HasSynced,
 	) {
-		runtime.HandleError(fmt.Errorf("Timed out waiting for caches to sync"))
+		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 	}
 
 	// in big clusters, deltas can keep arriving even after HasSynced
@@ -180,7 +181,7 @@ func (i *Informer) Run(stopCh chan struct{}) {
 	if !cache.WaitForCacheSync(stopCh,
 		i.Ingress.HasSynced,
 	) {
-		runtime.HandleError(fmt.Errorf("Timed out waiting for caches to sync"))
+		runtime.HandleError(fmt.Errorf("timed out waiting for caches to sync"))
 	}
 }
 
@@ -208,8 +209,6 @@ type k8sStore struct {
 	// secret in the annotations.
 	secretIngressMap ObjectRefMap
 
-	filesystem file.Filesystem
-
 	// updateCh
 	updateCh *channels.RingChannel
 
@@ -229,7 +228,6 @@ func New(
 	namespace, configmap, tcp, udp, defaultSSLCertificate string,
 	resyncPeriod time.Duration,
 	client clientset.Interface,
-	fs file.Filesystem,
 	updateCh *channels.RingChannel,
 	pod *k8s.PodInfo,
 	disableCatchAll bool) Storer {
@@ -238,7 +236,6 @@ func New(
 		informers:             &Informer{},
 		listers:               &Lister{},
 		sslStore:              NewSSLCertTracker(),
-		filesystem:            fs,
 		updateCh:              updateCh,
 		backendConfig:         ngx_config.NewDefault(),
 		syncSecretMu:          &sync.Mutex{},
@@ -494,6 +491,7 @@ func New(
 					}
 					store.syncIngress(ing)
 				}
+
 				updateCh.In() <- Event{
 					Type: DeleteEvent,
 					Obj:  obj,
@@ -527,48 +525,69 @@ func New(
 		},
 	}
 
+	// TODO: add e2e test to verify that changes to one or more configmap trigger an update
+	changeTriggerUpdate := func(name string) bool {
+		return name == configmap || name == tcp || name == udp
+	}
+
 	cmEventHandler := cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			cm := obj.(*corev1.ConfigMap)
 			key := k8s.MetaNamespaceKey(cm)
 			// updates to configuration configmaps can trigger an update
-			if key == configmap || key == tcp || key == udp {
+			if changeTriggerUpdate(key) {
 				recorder.Eventf(cm, corev1.EventTypeNormal, "CREATE", fmt.Sprintf("ConfigMap %v", key))
+
 				if key == configmap {
 					store.setConfig(cm)
 				}
-				updateCh.In() <- Event{
-					Type: ConfigurationEvent,
-					Obj:  obj,
-				}
+			}
+
+			updateCh.In() <- Event{
+				Type: ConfigurationEvent,
+				Obj:  obj,
 			}
 		},
 		UpdateFunc: func(old, cur interface{}) {
-			if !reflect.DeepEqual(old, cur) {
-				cm := cur.(*corev1.ConfigMap)
-				key := k8s.MetaNamespaceKey(cm)
-				// updates to configuration configmaps can trigger an update
-				if key == configmap || key == tcp || key == udp {
+			if reflect.DeepEqual(old, cur) {
+				return
+			}
+
+			// used to limit the number of events
+			triggerUpdate := false
+
+			cm := cur.(*corev1.ConfigMap)
+			key := k8s.MetaNamespaceKey(cm)
+			// updates to configuration configmaps can trigger an update
+			if changeTriggerUpdate(key) {
+				recorder.Eventf(cm, corev1.EventTypeNormal, "UPDATE", fmt.Sprintf("ConfigMap %v", key))
+				triggerUpdate = true
+			}
+
+			if key == configmap {
+				store.setConfig(cm)
+			}
+
+			ings := store.listers.IngressWithAnnotation.List()
+			for _, ingKey := range ings {
+				key := k8s.MetaNamespaceKey(ingKey)
+				ing, err := store.getIngress(key)
+				if err != nil {
+					klog.Errorf("could not find Ingress %v in local store: %v", key, err)
+					continue
+				}
+
+				if parser.AnnotationsReferencesConfigmap(ing) {
 					recorder.Eventf(cm, corev1.EventTypeNormal, "UPDATE", fmt.Sprintf("ConfigMap %v", key))
-					if key == configmap {
-						store.setConfig(cm)
-					}
+					store.syncIngress(ing)
+					triggerUpdate = true
+				}
+			}
 
-					ings := store.listers.IngressWithAnnotation.List()
-					for _, ingKey := range ings {
-						key := k8s.MetaNamespaceKey(ingKey)
-						ing, err := store.getIngress(key)
-						if err != nil {
-							klog.Errorf("could not find Ingress %v in local store: %v", key, err)
-							continue
-						}
-						store.syncIngress(ing)
-					}
-
-					updateCh.In() <- Event{
-						Type: ConfigurationEvent,
-						Obj:  cur,
-					}
+			if triggerUpdate {
+				updateCh.In() <- Event{
+					Type: ConfigurationEvent,
+					Obj:  cur,
 				}
 			}
 		},
@@ -684,6 +703,8 @@ func (s *k8sStore) updateSecretIngressMap(ing *networkingv1beta1.Ingress) {
 	secretAnnotations := []string{
 		"auth-secret",
 		"auth-tls-secret",
+		"proxy-ssl-secret",
+		"secure-verify-ca-secret",
 	}
 	for _, ann := range secretAnnotations {
 		secrKey, err := objectRefAnnotationNsKey(ann, ing)
@@ -778,6 +799,12 @@ func (s *k8sStore) ListIngresses(filter IngressFilterFunc) []*ingress.Ingress {
 	sort.SliceStable(ingresses, func(i, j int) bool {
 		ir := ingresses[i].CreationTimestamp
 		jr := ingresses[j].CreationTimestamp
+		if ir.Equal(&jr) {
+			in := fmt.Sprintf("%v/%v", ingresses[i].Namespace, ingresses[i].Name)
+			jn := fmt.Sprintf("%v/%v", ingresses[j].Namespace, ingresses[j].Name)
+			klog.V(3).Infof("Ingress %v and %v have identical CreationTimestamp", in, jn)
+			return in > jn
+		}
 		return ir.Before(&jr)
 	})
 
@@ -811,9 +838,11 @@ func (s *k8sStore) GetAuthCertificate(name string) (*resolver.AuthSSLCert, error
 	}
 
 	return &resolver.AuthSSLCert{
-		Secret:     name,
-		CAFileName: cert.CAFileName,
-		PemSHA:     cert.PemSHA,
+		Secret:      name,
+		CAFileName:  cert.CAFileName,
+		CASHA:       cert.CASHA,
+		CRLFileName: cert.CRLFileName,
+		CRLSHA:      cert.CRLSHA,
 	}, nil
 }
 

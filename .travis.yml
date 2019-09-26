@@ -1,6 +1,6 @@
 language: go
 go:
-- 1.12.x
+- 1.13.x
 go_import_path: k8s.io/ingress-nginx
 services:
 - docker
@@ -12,28 +12,29 @@ env:
 jobs:
   include:
   - stage: Static Check
-    before_script:
-    - go get golang.org/x/lint/golint
     script:
-    - build/run-in-docker.sh luacheck --codes -q rootfs/etc/nginx/lua/
-    - make static-check
+    - build/run-in-docker.sh make static-check
   - stage: Lua Unit Test
     script:
     - build/run-in-docker.sh make lua-test
-  - stage: Coverage
+  - stage: Go Unit Test
     script:
-    - build/run-in-docker.sh make cover
+    - build/run-in-docker.sh make test
   - stage: e2e
+    env:
+      - KUBETEST_IN_DOCKER="true"
+      - K8S_RELEASE=v1.15.3
+      - KIND_VERSION=v0.5.1
     if: commit_message !~ /(skip-e2e)/
     before_script:
-    - curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s
-      https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl
+    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.15.3/bin/linux/amd64/kubectl
       && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
-    - curl -Lo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.4.0/kind-linux-amd64
+    - curl -Lo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.5.1/kind-linux-amd64
       && chmod +x kind && sudo mv kind /usr/local/bin/
     - go get github.com/onsi/ginkgo/ginkgo
+    - sudo apt-get install parallel
     script: make kind-e2e-test
   - stage: publish amd64
-    if: type = push AND branch = master AND repo = Shopify/ingress
+    if: branch =~ /^release-/
     script:
     - ".travis/publish.sh amd64"

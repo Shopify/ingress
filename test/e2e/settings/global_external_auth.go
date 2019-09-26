@@ -19,6 +19,7 @@ package settings
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
@@ -32,7 +33,7 @@ var _ = framework.IngressNginxDescribe("Global External Auth", func() {
 
 	host := "global-external-auth"
 
-	echoServiceName := "http-svc"
+	echoServiceName := framework.EchoService
 
 	globalExternalAuthURLSetting := "global-auth-url"
 
@@ -55,7 +56,7 @@ var _ = framework.IngressNginxDescribe("Global External Auth", func() {
 	Context("when global external authentication is configured", func() {
 
 		BeforeEach(func() {
-			globalExternalAuthURL := fmt.Sprintf("http://httpbin.%s.svc.cluster.local:80/status/401", f.Namespace)
+			globalExternalAuthURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:80/status/401", framework.HTTPBinService, f.Namespace)
 
 			By("Adding an ingress rule for /foo")
 			fooIng := framework.NewSingleIngress("foo-ingress", fooPath, host, f.Namespace, echoServiceName, 80, nil)
@@ -144,6 +145,52 @@ var _ = framework.IngressNginxDescribe("Global External Auth", func() {
 				Set("Host", host).
 				End()
 			Expect(barResp.StatusCode).Should(Equal(http.StatusOK))
+		})
+
+		It("should still return status code 200 after auth backend is deleted using cache ", func() {
+
+			globalExternalAuthCacheKeySetting := "global-auth-cache-key"
+			globalExternalAuthCacheKey := "foo"
+			globalExternalAuthCacheDurationSetting := "global-auth-cache-duration"
+			globalExternalAuthCacheDuration := "200 201 401 30m"
+			globalExternalAuthURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:80/status/200", framework.HTTPBinService, f.Namespace)
+
+			By("Adding a global-auth-cache-key to configMap")
+			f.UpdateNginxConfigMapData(globalExternalAuthCacheKeySetting, globalExternalAuthCacheKey)
+			f.UpdateNginxConfigMapData(globalExternalAuthCacheDurationSetting, globalExternalAuthCacheDuration)
+			f.UpdateNginxConfigMapData(globalExternalAuthURLSetting, globalExternalAuthURL)
+
+			f.WaitForNginxServer(host,
+				func(server string) bool {
+					return Expect(server).Should(MatchRegexp(`\$cache_key.*foo`)) &&
+						Expect(server).Should(ContainSubstring(`proxy_cache_valid 200 201 401 30m;`))
+				})
+
+			resp, _, errs := gorequest.New().
+				Get(f.GetURL(framework.HTTP)+barPath).
+				Retry(10, 1*time.Second, http.StatusNotFound).
+				Set("Host", host).
+				SetBasicAuth("user", "password").
+				End()
+
+			for _, err := range errs {
+				Expect(err).NotTo(HaveOccurred())
+			}
+			Expect(resp.StatusCode).Should(Equal(http.StatusOK))
+
+			err := f.DeleteDeployment(framework.HTTPBinService)
+			Expect(err).NotTo(HaveOccurred())
+
+			_, _, errs = gorequest.New().
+				Get(f.GetURL(framework.HTTP)).
+				Retry(10, 1*time.Second, http.StatusNotFound).
+				Set("Host", host).
+				SetBasicAuth("user", "password").
+				End()
+
+			for _, err := range errs {
+				Expect(err).NotTo(HaveOccurred())
+			}
 		})
 
 		It(`should proxy_method method when global-auth-method is configured`, func() {

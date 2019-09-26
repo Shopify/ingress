@@ -18,6 +18,7 @@ package framework
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	. "github.com/onsi/ginkgo"
@@ -31,7 +32,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/ingress-nginx/internal/file"
 )
 
 const (
@@ -205,13 +205,13 @@ func secretInNamespace(c kubernetes.Interface, namespace, name string) wait.Cond
 }
 
 // WaitForFileInFS waits a default amount of time for the specified file is present in the filesystem
-func WaitForFileInFS(file string, fs file.Filesystem) error {
-	return wait.PollImmediate(Poll, DefaultTimeout, fileInFS(file, fs))
+func WaitForFileInFS(file string) error {
+	return wait.PollImmediate(Poll, DefaultTimeout, fileInFS(file))
 }
 
-func fileInFS(file string, fs file.Filesystem) wait.ConditionFunc {
+func fileInFS(file string) wait.ConditionFunc {
 	return func() (bool, error) {
-		stat, err := fs.Stat(file)
+		stat, err := os.Stat(file)
 		if err != nil {
 			return false, err
 		}
@@ -286,6 +286,14 @@ func podRunning(c kubernetes.Interface, podName, namespace string) wait.Conditio
 		}
 		return false, nil
 	}
+}
+
+func labelSelectorToString(labels map[string]string) string {
+	var str string
+	for k, v := range labels {
+		str += fmt.Sprintf("%s=%s,", k, v)
+	}
+	return str[:len(str)-1]
 }
 
 // NewInt32 converts int32 to a pointer

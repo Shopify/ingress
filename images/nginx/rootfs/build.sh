@@ -21,19 +21,19 @@ set -o pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
-export OPENRESTY_VERSION=1.15.8.1
+export OPENRESTY_VERSION=1.15.8.2
 export NGINX_DIGEST_AUTH=cd8641886c873cf543255aeda20d23e4cd603d05
 export NGINX_SUBSTITUTIONS=bc58cb11844bc42735bbaef7085ea86ace46d05b
-export NGINX_OPENTRACING_VERSION=0.8.0
+export NGINX_OPENTRACING_VERSION=0.9.0
 export OPENTRACING_CPP_VERSION=1.5.1
 export ZIPKIN_CPP_VERSION=0.5.2
 export JAEGER_VERSION=cdfaf5bb25ff5f8ec179fd548e6c7c2ade9a6a09
 export MSGPACK_VERSION=3.1.1
-export DATADOG_CPP_VERSION=0.4.3
+export DATADOG_CPP_VERSION=1.0.1
 export MODSECURITY_VERSION=d7101e13685efd7e7c9f808871b202656a969f4b
 export MODSECURITY_LIB_VERSION=3.0.3
 export OWASP_MODSECURITY_CRS_VERSION=3.1.0
-export LUA_BRIDGE_TRACER_VERSION=da8889d872dbea9864f45ed8c04680a01a9dd2e6
+export LUA_BRIDGE_TRACER_VERSION=0.1.1
 export NGINX_INFLUXDB_VERSION=5b09391cb7b9a889687c0aa67964c06a2d933e8b
 export GEOIP2_VERSION=3.2
 export NGINX_AJP_VERSION=bf6cd93f2098b59260de8d494f0f4b1f11a84627
@@ -89,7 +89,6 @@ clean-install \
   python \
   libmaxminddb-dev \
   dumb-init \
-  gdb \
   bc \
   unzip \
   nano \
@@ -125,8 +124,8 @@ mkdir --verbose -p "$BUILD_PATH"
 cd "$BUILD_PATH"
 
 # download, verify and extract the source files
-get_src 89a1238ca177692d6903c0adbea5bdf2a0b82c383662a73c03ebf5ef9f570842 \
-        "https://openresty.org/download/openresty-$OPENRESTY_VERSION.tar.gz"
+get_src bf92af41d3ad22880047a8b283fc213d59c7c1b83f8dae82e50d14b64d73ac38 \
+        "https://github.com/openresty/openresty/releases/download/v${OPENRESTY_VERSION}/openresty-${OPENRESTY_VERSION}.tar.gz"
 
 get_src fe683831f832aae4737de1e1026a4454017c2d5f98cb88b08c5411dc380062f8 \
         "https://github.com/atomx/nginx-http-auth-digest/archive/$NGINX_DIGEST_AUTH.tar.gz"
@@ -134,7 +133,7 @@ get_src fe683831f832aae4737de1e1026a4454017c2d5f98cb88b08c5411dc380062f8 \
 get_src 618551948ab14cac51d6e4ad00452312c7b09938f59ebff4f93875013be31f2d \
         "https://github.com/yaoweibin/ngx_http_substitutions_filter_module/archive/$NGINX_SUBSTITUTIONS.tar.gz"
 
-get_src b2159297814d5df153cf45f355bcd8ffdb71f2468e8149ad549d4f9c0cdc81ad \
+get_src 4fc410d7aef0c8a6371afa9f249d2c6cec50ea88785d05052f8f457c35b69c18 \
         "https://github.com/opentracing-contrib/nginx-opentracing/archive/v$NGINX_OPENTRACING_VERSION.tar.gz"
 
 get_src 015c4187f7a6426a2b5196f0ccd982aa87f010cf61f507ae3ce5c90523f92301 \
@@ -152,11 +151,11 @@ get_src 3183450d897baa9309347c8617edc0c97c5b29ffc32bd2d12f498edf2dcbeffa \
 get_src bda49f996a73d2c6080ff0523e7b535917cd28c8a79c3a5da54fc29332d61d1e \
         "https://github.com/msgpack/msgpack-c/archive/cpp-$MSGPACK_VERSION.tar.gz"
 
-get_src 7ef075c5936cfcca37d32c3b83b3b05d86f8a919d61fc94634f97a5c6542cff4 \
+get_src f7fb2ad541f812c36fd78f9a38e4582d87dadb563ab80bee3f7c3a2132a425c5 \
         "https://github.com/DataDog/dd-opentracing-cpp/archive/v$DATADOG_CPP_VERSION.tar.gz"
 
-get_src f5470132d8756eef293833e30508926894883924a445e3b9a07c869d26d4706d \
-        "https://github.com/opentracing/lua-bridge-tracer/archive/$LUA_BRIDGE_TRACER_VERSION.tar.gz"
+get_src 6faab57557bd9cc9fc38208f6bc304c1c13cf048640779f98812cf1f9567e202 \
+        "https://github.com/opentracing/lua-bridge-tracer/archive/v$LUA_BRIDGE_TRACER_VERSION.tar.gz"
 
 get_src 1af5a5632dc8b00ae103d51b7bf225de3a7f0df82f5c6a401996c080106e600e \
         "https://github.com/influxdata/nginx-influxdb-module/archive/$NGINX_INFLUXDB_VERSION.tar.gz"
@@ -330,6 +329,12 @@ mkdir -p /etc/nginx/modsecurity
 cp modsecurity.conf-recommended /etc/nginx/modsecurity/modsecurity.conf
 cp unicode.mapping /etc/nginx/modsecurity/unicode.mapping
 
+# Replace serial logging with concurrent
+sed -i 's|SecAuditLogType Serial|SecAuditLogType Concurrent|g' /etc/nginx/modsecurity/modsecurity.conf
+
+# Concurrent logging implies the log is stored in several files
+echo "SecAuditLogStorageDir /var/log/audit/" >> /etc/nginx/modsecurity/modsecurity.conf
+
 # Download owasp modsecurity crs
 cd /etc/nginx/
 
@@ -470,7 +475,12 @@ cd /usr/local/openresty
 export LUA_LIB_DIR=/usr/local/openresty/lualib
 export LUA_INCLUDE_DIR=/tmp/build/openresty-$OPENRESTY_VERSION/build/luajit-root/usr/local/openresty/luajit/include/luajit-2.1
 
-luarocks install lrexlib-pcre 2.7.2-1 PCRE_LIBDIR=${PCRE_DIR}
+ln -s $LUA_INCLUDE_DIR /usr/include/lua5.1
+
+if [[ ${ARCH} != "armv7l" ]]; then
+  luarocks install lrexlib-pcre 2.7.2-1 PCRE_LIBDIR=${PCRE_DIR}
+fi
+
 luarocks install lua-resty-iputils 0.3.0-1
 luarocks install lua-resty-cookie 0.1.0-1
 
@@ -478,8 +488,6 @@ cd "$BUILD_PATH/lua-resty-balancer-$LUA_RESTY_BALANCER_VERSION"
 
 make
 make install
-
-ln -s $LUA_INCLUDE_DIR /usr/include/lua5.1
 
 if [[ ${ARCH} != "armv7l" ]]; then
   /install_lua_resty_waf.sh
@@ -490,6 +498,16 @@ cd "$BUILD_PATH/lua-bridge-tracer-$LUA_BRIDGE_TRACER_VERSION"
 mkdir .build
 cd .build
 cmake ..
+make
+make install
+
+# mimalloc
+cd "$BUILD_PATH"
+git clone https://github.com/microsoft/mimalloc
+cd mimalloc
+mkdir -p out/release
+cd out/release
+cmake ../..
 make
 make install
 
@@ -504,7 +522,6 @@ apt-mark unmarkauto \
   libpcre3 \
   zlib1g \
   libaio1 \
-  gdb \
   geoip-bin \
   libyajl2 liblmdb0 libxml2 libpcre++ \
   gzip \
@@ -525,9 +542,14 @@ apt-get remove -y --purge \
   python \
   xz-utils \
   bc \
+  sensible-utils \
   git g++ pkgconf flex bison doxygen libyajl-dev liblmdb-dev libgeoip-dev libtool dh-autoreconf libpcre++-dev libxml2-dev
 
 apt-get autoremove -y
+
+# Remove configuration files left after the package removal.
+# To see such packages run: apt list | grep residual
+dpkg -l | grep '^rc' | awk '{print $2}' | xargs apt-get purge --yes
 
 rm -rf "$BUILD_PATH"
 rm -Rf /usr/share/man /usr/share/doc
@@ -554,6 +576,7 @@ writeDirs=( \
   /opt/modsecurity/var/log \
   /opt/modsecurity/var/upload \
   /opt/modsecurity/var/audit \
+  /var/log/audit \
 );
 
 for dir in "${writeDirs[@]}"; do

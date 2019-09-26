@@ -25,13 +25,23 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
+if ! command -v parallel &> /dev/null; then
+  if [[ "$OSTYPE" == "linux-gnu" ]]; then
+    echo "Parallel is not installed. Use the package manager to install it"
+  elif [[ "$OSTYPE" == "darwin"* ]]; then
+    echo "Parallel is not installed. Install it running brew install parallel"
+  fi
+
+  exit 1
+fi
+
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 export TAG=dev
 export ARCH=amd64
 export REGISTRY=ingress-controller
 
-export K8S_VERSION=${K8S_VERSION:-v1.14.1}
+export K8S_VERSION=${K8S_VERSION:-v1.15.3}
 
 KIND_CLUSTER_NAME="ingress-nginx-dev"
 
@@ -43,7 +53,7 @@ kind create cluster \
   --loglevel=${KIND_LOG_LEVEL} \
   --name ${KIND_CLUSTER_NAME} \
   --config ${DIR}/kind.yaml \
-  --image "aledbf/kind-node:${K8S_VERSION}"
+  --image "kindest/node:${K8S_VERSION}"
 
 export KUBECONFIG="$(kind get kubeconfig-path --name="${KIND_CLUSTER_NAME}")"
 
@@ -53,12 +63,27 @@ kubectl get nodes -o wide
 kubectl config set-context kubernetes-admin@${KIND_CLUSTER_NAME}
 
 echo "[dev-env] building container"
+echo "
 make -C ${DIR}/../../ build container
 make -C ${DIR}/../../ e2e-test-image
+make -C ${DIR}/../../images/fastcgi-helloserver/ build container
+make -C ${DIR}/../../images/httpbin/ container
+" | parallel --progress {}
+
+# Remove after https://github.com/kubernetes/ingress-nginx/pull/4271 is merged
+docker tag ${REGISTRY}/nginx-ingress-controller-${ARCH}:${TAG} ${REGISTRY}/nginx-ingress-controller:${TAG}
+
+# Preload images used in e2e tests
+docker pull openresty/openresty:1.15.8.2-alpine
 
 echo "[dev-env] copying docker images to cluster..."
+echo "
 kind load docker-image --name="${KIND_CLUSTER_NAME}" nginx-ingress-controller:e2e
 kind load docker-image --name="${KIND_CLUSTER_NAME}" ${REGISTRY}/nginx-ingress-controller:${TAG}
+kind load docker-image --name="${KIND_CLUSTER_NAME}" ${REGISTRY}/fastcgi-helloserver:${TAG}
+kind load docker-image --name="${KIND_CLUSTER_NAME}" openresty/openresty:1.15.8.2-alpine
+kind load docker-image --name="${KIND_CLUSTER_NAME}" ${REGISTRY}/httpbin:${TAG}
+" | parallel --progress
 
 echo "[dev-env] running e2e tests..."
 make -C ${DIR}/../../ e2e-test
