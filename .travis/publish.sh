@@ -20,9 +20,9 @@ set -o pipefail
 function docker_tag_exists() {
     TAG=${2//\"/}
     TOKEN=$( curl -s -H "Content-Type: application/json" -X POST -d '{"username": "'${DOCKER_USERNAME}'", "password": "'${DOCKER_PASSWORD}'"}' https://hub.docker.com/v2/users/login | jq -r ".token" )
-    RES=$(curl -sH "Authorization: JWT $TOKEN" "https://hub.docker.com/v2/repositories/$1-$3/tags/$TAG/" | jq .detail)
+    RES=$(curl -o /dev/null -w "%{http_code}" -I -s -H "Authorization: JWT $TOKEN" "https://hub.docker.com/v2/repositories/$1-$3/tags/$TAG/")
 
-    if [ "$RES" == "\"Not found\"" ];
+    if [ "$RES" == "404" ];
     then
         return 1
     fi
@@ -30,13 +30,14 @@ function docker_tag_exists() {
     return 0
 }
 
-ARCH=$1
-
 echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
 
-IMAGE=$(make -s image-info)
-if docker_tag_exists "shopify/nginx-ingress-controller" $(echo $IMAGE | jq .tag) "$ARCH"; then
-  echo "Image was already published, skipping: ${IMAGE}"
+IMAGE="shopify/nginx-ingress-controller"
+TAG=$(make -s image-info | jq .tag)
+ARCH=$1
+
+if docker_tag_exists "$IMAGE" "$TAG" "$ARCH"; then
+  echo "Image was already published, skipping: ${IMAGE}-${ARCH}:${TAG}"
   exit 0
 fi
 
